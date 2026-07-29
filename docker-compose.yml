@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      APP_NAME: NabuAuth
+      APP_ENV: production
+      APP_DEBUG: 'false'
+      APP_URL: ${APP_URL:-https://auth.nabuxai.com}
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: ${DB_DATABASE:-nabuauth}
+      DB_USERNAME: ${DB_USERNAME:-nabuauth}
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    labels:
+      - "coolify.managed=true"
+      - "traefik.enable=true"
+      - "traefik.http.routers.nabuauth.rule=Host(`${COOLIFY_FQDN:-auth.nabuxai.com}`)"
+      - "traefik.http.routers.nabuauth.entrypoints=https"
+      - "traefik.http.routers.nabuauth.tls=true"
+      - "traefik.http.routers.nabuauth.tls.certresolver=letsencrypt"
+      - "traefik.http.services.nabuauth.loadbalancer.server.port=80"
+    depends_on:
+      - postgres
+      - redis
+
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-nabuauth}
+      POSTGRES_USER: ${DB_USERNAME:-nabuauth}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-nabuauth}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:
