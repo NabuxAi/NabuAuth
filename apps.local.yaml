@@ -46,3 +46,12 @@ apps:
     redirect_uris:
       - http://localhost:5173/callback
     scopes: [openid, profile, email]
+
+  - id: nabuvoice
+    name: NabuVoice
+    description: Text-to-speech and call assistant
+    url: http://localhost:8090
+    redirect_uris:
+      - http://localhost:8090/auth/nabu/callback
+    scopes: [openid, profile, email, offline]
+    secret_env: NABUAUTH_SECRET_NABUVOICE
