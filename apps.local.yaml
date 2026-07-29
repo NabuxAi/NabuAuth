@@ -55,3 +55,12 @@ apps:
       - http://localhost:8090/auth/nabu/callback
     scopes: [openid, profile, email, offline]
     secret_env: NABUAUTH_SECRET_NABUVOICE
+
+  - id: nabugen
+    name: NabuGen
+    description: Multimodal generation
+    url: http://localhost:8000
+    redirect_uris:
+      - http://localhost:8000/auth/nabu/callback
+    scopes: [openid, profile, email, offline]
+    secret_env: NABUAUTH_SECRET_NABUGEN
