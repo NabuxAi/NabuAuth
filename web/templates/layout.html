@@ -1,0 +1,23 @@
+{{define "head"}}<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>{{.Title}} — NabuAuth</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="shell">
+  <a class="brand" href="/dashboard"><span class="brand-mark">N</span> Nabu<b>Auth</b></a>
+{{end}}
+
+{{define "foot"}}
+  <footer class="foot">
+    <span>Nabu ecosystem single sign-on</span>
+    <a href="{{.Issuer}}/.well-known/openid-configuration">OpenID configuration</a>
+  </footer>
+</div>
+</body>
+</html>
+{{end}}

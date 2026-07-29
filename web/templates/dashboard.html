@@ -1,0 +1,55 @@
+{{define "dashboard.html"}}{{template "head" .}}
+<main class="wide">
+  <header class="account">
+    <div class="avatar">{{if .User.AvatarURL}}<img src="{{.User.AvatarURL}}" alt="">{{else}}{{initials .User.Name}}{{end}}</div>
+    <div>
+      <h1>{{.User.Name}}</h1>
+      <p class="sub">{{.User.Email}}{{if .User.IsAdmin}} · <span class="badge">Administrator</span>{{end}}</p>
+    </div>
+    <form method="post" action="/logout"><button type="submit" class="ghost">Sign out</button></form>
+  </header>
+
+  <section class="wallet">
+    <h2>Wallet</h2>
+    <p class="balance">{{.BalanceMajor}} <span>{{.Wallet.Currency}}</span></p>
+    <p class="muted">Shared across NabuGate models, NabuVoice speech and NabuGen media.</p>
+    {{if .Transactions}}
+    <table class="ledger">
+      <thead><tr><th>When</th><th>What</th><th class="num">Amount</th><th class="num">Balance</th></tr></thead>
+      <tbody>
+        {{range .Transactions}}
+        <tr>
+          <td>{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
+          <td>{{.Description}}</td>
+          <td class="num {{if lt .AmountCents 0}}debit{{else}}credit{{end}}">{{.AmountCents}}</td>
+          <td class="num">{{.BalanceAfterCents}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    {{else}}<p class="muted">No activity yet.</p>{{end}}
+  </section>
+
+  <section>
+    <h2>Your apps</h2>
+    <div class="apps">
+      {{range .Apps}}
+      <article class="app">
+        <h3>{{.Name}}</h3>
+        <p>{{.Description}}</p>
+        <div class="app-foot">
+          <a class="primary small" href="{{.SSOURL}}">Open</a>
+          {{if .Connected}}
+          <form method="post" action="/dashboard/revoke">
+            <input type="hidden" name="csrf" value="{{$.CSRF}}">
+            <input type="hidden" name="client_id" value="{{.ID}}">
+            <button type="submit" class="ghost small">Disconnect</button>
+          </form>
+          {{end}}
+        </div>
+      </article>
+      {{end}}
+    </div>
+  </section>
+</main>
+{{template "foot" .}}{{end}}

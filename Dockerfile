@@ -1,36 +1,34 @@
-FROM php:8.3-fpm-alpine
+# syntax=docker/dockerfile:1
 
-# Install system dependencies & PHP extensions
-RUN apk add --no-gradient --no-cache \
-    nginx \
-    supervisor \
-    postgresql-dev \
-    libpng-dev \
-    libzip-dev \
-    zip \
-    unzip \
-    git \
-    curl \
-    && docker-php-ext-install pdo pdo_pgsql gd zip opcache
+############################
+# Stage 1: Build
+############################
+FROM golang:1.24-bookworm AS build
 
-# Install Composer
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+WORKDIR /src
 
-WORKDIR /var/www/html
+# Cache module downloads
+COPY go.mod go.sum* ./
+RUN go mod download
 
-# Copy application files
 COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/nabuauth ./cmd/nabuauth
 
-# Install dependencies
-RUN composer install --no-dev --optimize-autoloader --no-interaction
+############################
+# Stage 2: Runtime
+############################
+FROM gcr.io/distroless/static-debian12:nonroot
 
-# Set permissions
-RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+WORKDIR /app
+COPY --from=build /out/nabuauth /app/nabuauth
 
-# Nginx & Supervisor configuration
-COPY docker/nginx.conf /etc/nginx/nginx.conf
-COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+# The app registry is baked in so the server boots out of the box. It holds no
+# secrets — every client secret is read from its own env var at startup — so
+# shipping it inside the image is safe. Mount your own file at /app/apps.yaml to
+# override it.
+COPY apps.yaml /app/apps.yaml
+ENV NABUAUTH_CONFIG=/app/apps.yaml
 
-EXPOSE 80
+EXPOSE 8099
 
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+ENTRYPOINT ["/app/nabuauth"]

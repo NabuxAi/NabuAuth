@@ -1,0 +1,116 @@
+# NabuAuth configuration.
+#
+# This file is the source of truth for which applications may sign Nabu users
+# in. Secrets are never written here — each app names an environment variable
+# and the value is read from the process environment at boot.
+
+server:
+  port: 8099
+  issuer: ${NABUAUTH_ISSUER}
+  access_token_ttl: 1h
+  refresh_token_ttl: 720h   # 30 days
+  session_ttl: 720h
+  code_ttl: 10m
+  # Off means an administrator creates accounts. The sign-up form stays reachable
+  # while the database has no users at all, so a fresh deployment can be claimed.
+  allow_registration: false
+
+# Every scope an app may request, with the sentence the user reads on the
+# consent screen. An app requesting a scope that is not listed here is refused.
+scopes:
+  openid: Confirm your Nabu identity
+  profile: Your name, avatar and phone number
+  email: Your email address
+  wallet: Read your wallet balance and activity
+  wallet.write: Charge your wallet for the usage you incur
+  offline: Stay signed in when you are away
+
+apps:
+  - id: nabugate
+    name: NabuGate AI
+    description: Unified LLM, vision and multi-model gateway
+    icon: cpu-chip
+    url: https://gate.nabuxai.com
+    badge: Active
+    redirect_uris:
+      - https://gate.nabuxai.com/auth/callback
+    # NabuGate also meters usage, so it is the one app that may charge a wallet.
+    scopes: [openid, profile, email, wallet, wallet.write, offline]
+    secret_env: NABUAUTH_SECRET_NABUGATE
+
+  - id: nabudesk
+    name: NabuDesk
+    description: Omnichannel AI support and operations workspace
+    icon: chat-bubble-left-right
+    url: https://desk.nabuxai.com
+    badge: Active
+    redirect_uris:
+      - https://desk.nabuxai.com/auth/nabu/callback
+    scopes: [openid, profile, email, wallet, offline]
+    secret_env: NABUAUTH_SECRET_NABUDESK
+
+  - id: nabugen
+    name: NabuGen
+    description: Multimodal image, video and asset generation
+    icon: photo
+    url: https://gen.nabuxai.com
+    badge: Active
+    redirect_uris:
+      - https://gen.nabuxai.com/auth/nabu/callback
+    scopes: [openid, profile, email, wallet, offline]
+    secret_env: NABUAUTH_SECRET_NABUGEN
+
+  - id: nabuvoice
+    name: NabuVoice
+    description: Text-to-speech and speech synthesis platform
+    icon: speaker-wave
+    url: https://voice.nabuxai.com
+    badge: Active
+    redirect_uris:
+      - https://voice.nabuxai.com/auth/nabu/callback
+    scopes: [openid, profile, email, wallet, offline]
+    secret_env: NABUAUTH_SECRET_NABUVOICE
+
+  - id: nabuwrite
+    name: NabuWrite
+    description: AI narrative and long-form content engine
+    icon: pencil-square
+    url: https://write.nabuxai.com
+    badge: Active
+    redirect_uris:
+      - https://write.nabuxai.com/auth/nabu/callback
+    scopes: [openid, profile, email, wallet, offline]
+    secret_env: NABUAUTH_SECRET_NABUWRITE
+
+  - id: nabusu
+    name: NabuSu
+    description: Companion and assistant surface
+    icon: sparkles
+    url: https://su.nabuxai.com
+    badge: Beta
+    redirect_uris:
+      - https://su.nabuxai.com/auth/nabu/callback
+    scopes: [openid, profile, email, offline]
+    secret_env: NABUAUTH_SECRET_NABUSU
+
+  - id: nabuwatch
+    name: NabuWatch
+    description: Monitoring and compliance observatory
+    icon: eye
+    url: https://watch.nabuxai.com
+    badge: Beta
+    redirect_uris:
+      - https://watch.nabuxai.com/auth/nabu/callback
+    scopes: [openid, profile, email, offline]
+    secret_env: NABUAUTH_SECRET_NABUWATCH
+
+  - id: nabux-store
+    name: Nabux Store
+    description: Ecosystem storefront and subscriptions
+    icon: shopping-bag
+    url: https://nabux.store
+    badge: Active
+    redirect_uris:
+      - https://nabux.store/api/auth/callback/nabu
+    scopes: [openid, profile, email, wallet, offline]
+    secret_env: NABUAUTH_SECRET_NABUXSTORE

@@ -1,0 +1,7 @@
+{{define "error.html"}}{{template "head" .}}
+<main class="card">
+  <h1>{{.Title}}</h1>
+  <p class="sub">{{.Message}}</p>
+  <p><a class="primary small" href="/dashboard">Back to your account</a></p>
+</main>
+{{template "foot" .}}{{end}}

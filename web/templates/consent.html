@@ -1,0 +1,26 @@
+{{define "consent.html"}}{{template "head" .}}
+<main class="card">
+  <h1>{{.Client.Name}} wants to use your Nabu account</h1>
+  <p class="sub">Signed in as <b>{{.User.Email}}</b>. <a href="/oauth/authorize?prompt=login&amp;client_id={{.Client.ClientID}}">Not you?</a></p>
+
+  <ul class="scopes">
+    {{range .Scopes}}<li><span class="tick">✓</span> {{.Label}}</li>{{end}}
+  </ul>
+
+  <form method="post" action="/oauth/authorize" class="form row">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <input type="hidden" name="client_id" value="{{.Request.Client.ClientID}}">
+    <input type="hidden" name="redirect_uri" value="{{.Request.RedirectURI}}">
+    <input type="hidden" name="response_type" value="code">
+    <input type="hidden" name="scope" value="{{.RawScope}}">
+    <input type="hidden" name="state" value="{{.Request.State}}">
+    <input type="hidden" name="nonce" value="{{.Request.Nonce}}">
+    <input type="hidden" name="code_challenge" value="{{.Request.CodeChallenge}}">
+    <input type="hidden" name="code_challenge_method" value="{{.Request.ChallengeMethod}}">
+    <button type="submit" name="approve" value="no" class="ghost">Cancel</button>
+    <button type="submit" name="approve" value="yes" class="primary">Allow</button>
+  </form>
+
+  <p class="muted">You can revoke this at any time from your <a href="/dashboard">Nabu account</a>.</p>
+</main>
+{{template "foot" .}}{{end}}

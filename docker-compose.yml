@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   app:
     build:
@@ -7,18 +5,19 @@ services:
       dockerfile: Dockerfile
     restart: always
     environment:
-      APP_NAME: NabuAuth
-      APP_ENV: production
-      APP_DEBUG: 'false'
-      APP_URL: ${APP_URL:-https://auth.nabuxai.com}
-      DB_CONNECTION: pgsql
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_DATABASE: ${DB_DATABASE:-nabuauth}
-      DB_USERNAME: ${DB_USERNAME:-nabuauth}
-      DB_PASSWORD: ${DB_PASSWORD}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
+      NABUAUTH_ISSUER: ${NABUAUTH_ISSUER:-https://auth.nabuxai.com}
+      DATABASE_URL: postgres://${DB_USERNAME:-nabuauth}:${DB_PASSWORD}@postgres:5432/${DB_DATABASE:-nabuauth}?sslmode=disable
+      # One secret per ecosystem app. An app whose secret is missing is still
+      # registered but cannot complete a token exchange, and the server says so
+      # in its startup log instead of failing later inside a redirect.
+      NABUAUTH_SECRET_NABUGATE: ${NABUAUTH_SECRET_NABUGATE}
+      NABUAUTH_SECRET_NABUDESK: ${NABUAUTH_SECRET_NABUDESK}
+      NABUAUTH_SECRET_NABUGEN: ${NABUAUTH_SECRET_NABUGEN}
+      NABUAUTH_SECRET_NABUVOICE: ${NABUAUTH_SECRET_NABUVOICE}
+      NABUAUTH_SECRET_NABUWRITE: ${NABUAUTH_SECRET_NABUWRITE}
+      NABUAUTH_SECRET_NABUSU: ${NABUAUTH_SECRET_NABUSU}
+      NABUAUTH_SECRET_NABUWATCH: ${NABUAUTH_SECRET_NABUWATCH}
+      NABUAUTH_SECRET_NABUXSTORE: ${NABUAUTH_SECRET_NABUXSTORE}
     labels:
       - "coolify.managed=true"
       - "traefik.enable=true"
@@ -26,10 +25,10 @@ services:
       - "traefik.http.routers.nabuauth.entrypoints=https"
       - "traefik.http.routers.nabuauth.tls=true"
       - "traefik.http.routers.nabuauth.tls.certresolver=letsencrypt"
-      - "traefik.http.services.nabuauth.loadbalancer.server.port=80"
+      - "traefik.http.services.nabuauth.loadbalancer.server.port=8099"
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
 
   postgres:
     image: postgres:16-alpine
@@ -46,17 +45,5 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    restart: always
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
 volumes:
   postgres_data:
-  redis_data:

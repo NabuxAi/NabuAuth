@@ -1,0 +1,48 @@
+# Local development config. Points every app at localhost and opens sign-up so a
+# fresh database can be used immediately. Not used in production.
+
+server:
+  port: 8099
+  issuer: http://localhost:8099
+  access_token_ttl: 1h
+  refresh_token_ttl: 720h
+  session_ttl: 24h
+  code_ttl: 10m
+  allow_registration: true
+
+scopes:
+  openid: Confirm your Nabu identity
+  profile: Your name, avatar and phone number
+  email: Your email address
+  wallet: Read your wallet balance and activity
+  wallet.write: Charge your wallet for the usage you incur
+  offline: Stay signed in when you are away
+
+apps:
+  - id: nabugate
+    name: NabuGate AI
+    description: Unified LLM, vision and multi-model gateway
+    url: http://localhost:8080
+    redirect_uris:
+      - http://localhost:8080/auth/callback
+    scopes: [openid, profile, email, wallet, wallet.write, offline]
+    secret_env: NABUAUTH_SECRET_NABUGATE
+
+  - id: nabudesk
+    name: NabuDesk
+    description: Omnichannel AI support and operations workspace
+    url: http://localhost:8000
+    redirect_uris:
+      - http://localhost:8000/auth/nabu/callback
+    scopes: [openid, profile, email, wallet, offline]
+    secret_env: NABUAUTH_SECRET_NABUDESK
+
+  - id: nabuspa
+    name: Nabu SPA (public client)
+    description: Example browser client that authenticates with PKCE only
+    url: http://localhost:5173
+    public: true
+    hidden: true
+    redirect_uris:
+      - http://localhost:5173/callback
+    scopes: [openid, profile, email]

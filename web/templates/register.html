@@ -1,0 +1,28 @@
+{{define "register.html"}}{{template "head" .}}
+<main class="card">
+  <h1>Create your Nabu account</h1>
+  <p class="sub">It signs you in to every Nabu app.</p>
+  {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
+  <form method="post" action="/register" class="form">
+    <input type="hidden" name="next" value="{{.Next}}">
+    <label>
+      <span>Name</span>
+      <input type="text" name="name" value="{{.Name}}" autocomplete="name" required autofocus>
+    </label>
+    <label>
+      <span>Email</span>
+      <input type="email" name="email" value="{{.Email}}" autocomplete="email" required>
+    </label>
+    <label>
+      <span>Phone <em>optional</em></span>
+      <input type="tel" name="phone" value="{{.Phone}}" autocomplete="tel">
+    </label>
+    <label>
+      <span>Password <em>at least 10 characters</em></span>
+      <input type="password" name="password" autocomplete="new-password" minlength="10" required>
+    </label>
+    <button type="submit" class="primary">Create account</button>
+  </form>
+  <p class="muted">Already have one? <a href="/login{{if .Next}}?next={{.Next}}{{end}}">Sign in</a>.</p>
+</main>
+{{template "foot" .}}{{end}}
