@@ -66,6 +66,19 @@ there is no dashboard that can contradict it.
 
 ## 5. Implement the app side
 
+A Nabu account is the way in, not one option beside a password form. Every app
+redirects `/login` straight here, or leads with the Nabu button and collapses its
+own fields behind one click, and hides local self-registration — accounts come
+from one place now.
+
+Keep the local password path reachable but unadvertised (`?local=1`, or
+`NABUAUTH_PRIMARY=false` to put it back in front). If single sign-on were the
+only door, an outage here would lock every app in the ecosystem out at the same
+moment, and the NabuGate console — the tool for fixing exactly that — would be
+locked with them.
+
+
+
 Four moving parts, in this order:
 
 1. **Start** — generate a `state` and a PKCE verifier, keep both server-side,
@@ -95,6 +108,35 @@ and mints tokens. The NabuGate console therefore checks an explicit allow-list
 (`NABU_CONSOLE_NABUAUTH_ADMINS`) after a successful sign-in, and refuses to
 offer single sign-on at all when that list is empty — an empty list must read as
 "nobody", never as "everyone".
+
+## Where accounts come from
+
+Sign-up is closed in production, so nobody self-registers. An administrator adds
+people at `/admin/users`; the password is generated, shown once, and never
+stored in readable form. Disabling an account there also ends its sessions and
+refresh tokens, or the decision would not take effect until they expired.
+
+The first account on a fresh deployment has nobody to create it, so it is either
+claimed through the sign-up form — open only while the database has no users at
+all — or made from a shell:
+
+```bash
+docker compose exec app /app/nabuauth -create-user you@example.com -name "You" -admin
+```
+
+There is no emailed password reset, because this deployment has no outbound
+mail; `-reset-password <email>` does the same job from the same shell.
+
+## What the server refuses
+
+Worth knowing before debugging a failed sign-in, since each of these is
+deliberate and verified in production:
+
+- An app sending another app's callback is refused with no redirect at all.
+- Only NabuGate may request `wallet.write`; every other app asking for it gets
+  `invalid_scope`.
+- An unknown `client_id` renders an error page rather than bouncing anywhere.
+- A code is single-use, and a refresh token works exactly once.
 
 ## Refresh tokens rotate
 
