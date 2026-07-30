@@ -703,3 +703,32 @@ func (s *Store) Cleanup(ctx context.Context) error {
 	}
 	return nil
 }
+
+// ListUsers returns every account, newest first. Small deployments only — the
+// admin page shows the whole list rather than paging.
+func (s *Store) ListUsers(ctx context.Context, limit int) ([]User, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 200
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT `+userColumns+` FROM users ORDER BY id DESC LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []User
+	for rows.Next() {
+		u, err := scanUser(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// SetActive enables or disables an account. A disabled account cannot sign in
+// and its existing sessions stop resolving.
+func (s *Store) SetActive(ctx context.Context, id int64, active bool) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE users SET is_active = $2, updated_at = now() WHERE id = $1`, id, active)
+	return err
+}

@@ -120,6 +120,23 @@ go run ./cmd/nabuauth -config apps.local.yaml
 production, sign-up is closed except while the database holds no accounts at
 all, so the first person to reach a fresh deployment claims it as administrator.
 
+## Adding people
+
+Sign-up is closed in production and every app treats a Nabu account as the way
+in, so accounts are created deliberately rather than by anyone who finds the
+URL. An administrator adds people from **Manage accounts** on their dashboard
+(`/admin/users`): the password is generated, shown once, and never stored in
+readable form. Disabling an account there stops it signing in and ends every
+session it has open.
+
+The first account on a fresh deployment has nobody to create it, so there are
+two ways to bootstrap: claim it through the sign-up form, which stays open only
+while the database has no users at all, or create it from a shell:
+
+```bash
+docker compose exec app /app/nabuauth -create-user you@example.com -name "You" -admin
+```
+
 ## Recovering an account
 
 There is no email-based password reset: the deployment has no outbound mail, so a

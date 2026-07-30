@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -591,4 +592,134 @@ func TestRevokeUserSessionsSignsEveryBrowserOut(t *testing.T) {
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("the old session still works: got %d, want a redirect to login", resp.StatusCode)
 	}
+}
+
+// seedAdmin creates an administrator account.
+func seedAdmin(t *testing.T, st *store.Store, email, password string) store.User {
+	t.Helper()
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
+	if err != nil {
+		t.Fatalf("hash: %v", err)
+	}
+	u, err := st.CreateUser(context.Background(), "Admin", email, "", string(hash), true)
+	if err != nil {
+		t.Fatalf("create admin: %v", err)
+	}
+	return u
+}
+
+func TestOnlyAnAdminCanManageAccounts(t *testing.T) {
+	ts, st := newTestServer(t)
+	seedUser(t, st, "member@nabuxai.com", "correct-horse-battery")
+
+	// Signed out entirely. The client must not follow the redirect, or the 302
+	// to /login is invisible and the assertion tests nothing.
+	noFollow := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	resp, err := noFollow.Get(ts.URL + "/admin/users")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("anonymous got %d, want a redirect to login", resp.StatusCode)
+	}
+	if loc := resp.Header.Get("Location"); !strings.HasPrefix(loc, "/login") {
+		t.Fatalf("anonymous was sent to %q, want the login page", loc)
+	}
+
+	// Signed in, but an ordinary member. The gate is the account flag, not the
+	// URL prefix.
+	member := signIn(t, ts, "member@nabuxai.com", "correct-horse-battery")
+	resp, err = member.Get(ts.URL + "/admin/users")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("a member got %d, want 403", resp.StatusCode)
+	}
+}
+
+func TestAdminCreatesAnAccountThatCanSignIn(t *testing.T) {
+	ts, st := newTestServer(t)
+	seedAdmin(t, st, "admin@nabuxai.com", "correct-horse-battery")
+	admin := signIn(t, ts, "admin@nabuxai.com", "correct-horse-battery")
+
+	page := getBody(t, admin, ts.URL+"/admin/users")
+	csrf := extractInput(page, "csrf")
+	if csrf == "" {
+		t.Fatal("no csrf token on the admin page")
+	}
+
+	resp, err := admin.PostForm(ts.URL+"/admin/users", url.Values{
+		"csrf": {csrf}, "email": {"teammate@nabuxai.com"}, "name": {"Teammate"},
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("create returned %d", resp.StatusCode)
+	}
+
+	// The generated password is shown once; it has to actually work, or the page
+	// hands out a credential nobody can use.
+	password := passwordFromPage(string(body))
+	if password == "" {
+		t.Fatalf("no password shown after creating the account: %s", truncate(string(body)))
+	}
+	signIn(t, ts, "teammate@nabuxai.com", password)
+}
+
+func TestAdminCannotDisableTheirOwnAccount(t *testing.T) {
+	ts, st := newTestServer(t)
+	adminUser := seedAdmin(t, st, "admin@nabuxai.com", "correct-horse-battery")
+	admin := signIn(t, ts, "admin@nabuxai.com", "correct-horse-battery")
+
+	csrf := extractInput(getBody(t, admin, ts.URL+"/admin/users"), "csrf")
+	resp, err := admin.PostForm(ts.URL+"/admin/users/active", url.Values{
+		"csrf": {csrf}, "user_id": {strconv.FormatInt(adminUser.ID, 10)}, "active": {"no"},
+	})
+	if err != nil {
+		t.Fatalf("toggle: %v", err)
+	}
+	resp.Body.Close()
+
+	// On a one-admin deployment this would end administration entirely.
+	fresh, err := st.UserByID(context.Background(), adminUser.ID)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if !fresh.IsActive {
+		t.Fatal("the admin disabled themselves")
+	}
+}
+
+func getBody(t *testing.T, client *http.Client, url string) string {
+	t.Helper()
+	resp, err := client.Get(url)
+	if err != nil {
+		t.Fatalf("get %s: %v", url, err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	return string(body)
+}
+
+// passwordFromPage pulls the one-time password out of the rendered admin page.
+func passwordFromPage(html string) string {
+	const marker = `class="balance" style="font-size:1.35rem">`
+	i := strings.Index(html, marker)
+	if i < 0 {
+		return ""
+	}
+	rest := html[i+len(marker):]
+	j := strings.Index(rest, "<")
+	if j < 0 {
+		return ""
+	}
+	return strings.TrimSpace(rest[:j])
 }

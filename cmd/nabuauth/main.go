@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -30,6 +31,9 @@ func main() {
 	// with shell access recovers an account instead — which is the same trust
 	// boundary, since that operator can already read the database.
 	resetEmail := flag.String("reset-password", "", "set a new password for this account, print it, and exit")
+	createEmail := flag.String("create-user", "", "create an account with a generated password, print it, and exit")
+	createName := flag.String("name", "", "display name for -create-user")
+	createAdmin := flag.Bool("admin", false, "make the account created by -create-user an administrator")
 	flag.Parse()
 
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -55,6 +59,14 @@ func main() {
 		os.Exit(1)
 	}
 	defer st.Close()
+
+	if *createEmail != "" {
+		if err := createUser(ctx, st, *createEmail, *createName, *createAdmin); err != nil {
+			log.Error("could not create the account", "email", *createEmail, "error", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	if *resetEmail != "" {
 		if err := resetPassword(ctx, st, *resetEmail); err != nil {
@@ -134,6 +146,55 @@ func main() {
 	}
 }
 
+// createUser adds an account and prints its generated password once.
+//
+// Sign-up is closed in production, and the apps present a Nabu account as the
+// only way in, so without this there is no path to a second person: an
+// administrator would have to write to the database by hand.
+func createUser(ctx context.Context, st *store.Store, email, name string, admin bool) error {
+	if name == "" {
+		name = email
+		if at := strings.IndexByte(email, '@'); at > 0 {
+			name = email[:at]
+		}
+	}
+
+	password, err := generatePassword()
+	if err != nil {
+		return err
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	user, err := st.CreateUser(ctx, name, email, "", string(hash), admin)
+	if errors.Is(err, store.ErrDuplicate) {
+		return fmt.Errorf("an account with that email or phone already exists")
+	}
+	if err != nil {
+		return err
+	}
+
+	role := "user"
+	if user.IsAdmin {
+		role = "administrator"
+	}
+	fmt.Printf("Created %s (%s) with password: %s\n", user.Email, role, password)
+	fmt.Println("Give it to them over a channel you trust, and have them change it after signing in.")
+	return nil
+}
+
+// generatePassword returns a random password strong enough that printing it
+// once and never storing it is safe.
+func generatePassword() (string, error) {
+	buf := make([]byte, 18)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(buf), nil
+}
+
 // resetPassword sets a fresh random password on an account and prints it once.
 //
 // A generated password is printed rather than read from a flag on purpose: a
@@ -145,11 +206,10 @@ func resetPassword(ctx context.Context, st *store.Store, email string) error {
 		return fmt.Errorf("no account with that email: %w", err)
 	}
 
-	buf := make([]byte, 18)
-	if _, err := rand.Read(buf); err != nil {
+	password, err := generatePassword()
+	if err != nil {
 		return err
 	}
-	password := base64.RawURLEncoding.EncodeToString(buf)
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {

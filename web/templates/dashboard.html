@@ -6,7 +6,10 @@
       <h1>{{.User.Name}}</h1>
       <p class="sub">{{.User.Email}}{{if .User.IsAdmin}} · <span class="badge">Administrator</span>{{end}}</p>
     </div>
-    <form method="post" action="/logout"><button type="submit" class="ghost">Sign out</button></form>
+    <div style="margin-left:auto;display:flex;gap:.5rem;align-items:center">
+      {{if .User.IsAdmin}}<a class="ghost small" href="/admin/users">Manage accounts</a>{{end}}
+      <form method="post" action="/logout"><button type="submit" class="ghost">Sign out</button></form>
+    </div>
   </header>
 
   <section class="wallet">

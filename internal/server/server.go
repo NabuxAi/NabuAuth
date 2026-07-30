@@ -101,6 +101,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /dashboard", s.handleDashboard)
 	mux.HandleFunc("POST /dashboard/revoke", s.handleRevokeApp)
 
+	// Administrator pages. Sign-up is closed and every app treats a Nabu account
+	// as the way in, so this is the path to a second person.
+	mux.HandleFunc("GET /admin/users", s.handleAdminUsers)
+	mux.HandleFunc("POST /admin/users", s.handleAdminCreateUser)
+	mux.HandleFunc("POST /admin/users/active", s.handleAdminToggleUser)
+
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(web.Static()))))
 

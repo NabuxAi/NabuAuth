@@ -1,0 +1,74 @@
+{{define "admin_users.html"}}{{template "head" .}}
+<main class="wide">
+  <header class="account">
+    <div class="avatar">{{initials .User.Name}}</div>
+    <div>
+      <h1>Nabu accounts</h1>
+      <p class="sub">One account signs a person in to every product in the ecosystem.</p>
+    </div>
+    <a class="ghost small" href="/dashboard" style="margin-left:auto">Back to your account</a>
+  </header>
+
+  {{if .Error}}<section><p class="alert" role="alert">{{.Error}}</p></section>{{end}}
+
+  {{if .Created}}
+  <section>
+    <h2>{{.Created.Email}} can now sign in</h2>
+    <p class="muted">This password is shown once and is not stored anywhere in
+      readable form. Send it over a channel you trust, and have them change it
+      after signing in.</p>
+    <p class="balance" style="font-size:1.35rem">{{.Password}}</p>
+  </section>
+  {{end}}
+
+  <section>
+    <h2>Add someone</h2>
+    <form method="post" action="/admin/users" class="form">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <label>
+        <span>Email</span>
+        <input type="email" name="email" required autocomplete="off">
+      </label>
+      <label>
+        <span>Name <em>optional</em></span>
+        <input type="text" name="name" autocomplete="off">
+      </label>
+      <label style="display:flex;gap:.5rem;align-items:center">
+        <input type="checkbox" name="is_admin" value="yes" style="width:auto">
+        <span>Administrator — can manage accounts</span>
+      </label>
+      <button type="submit" class="primary">Create account</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>Everyone</h2>
+    <table class="ledger">
+      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Since</th><th></th></tr></thead>
+      <tbody>
+        {{range .Users}}
+        <tr>
+          <td>{{.Name}}</td>
+          <td>{{.Email}}</td>
+          <td>{{if .IsAdmin}}<span class="badge">Administrator</span>{{else}}Member{{end}}</td>
+          <td>{{.CreatedAt.Format "2006-01-02"}}</td>
+          <td class="num">
+            {{if eq .ID $.SelfID}}
+              <span class="muted">you</span>
+            {{else}}
+              <form method="post" action="/admin/users/active">
+                <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                <input type="hidden" name="user_id" value="{{.ID}}">
+                <input type="hidden" name="active" value="{{if .IsActive}}no{{else}}yes{{end}}">
+                <button type="submit" class="ghost small">{{if .IsActive}}Disable{{else}}Enable{{end}}</button>
+              </form>
+            {{end}}
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    <p class="muted">Disabling an account stops it signing in and ends every session it has open.</p>
+  </section>
+</main>
+{{template "foot" .}}{{end}}
