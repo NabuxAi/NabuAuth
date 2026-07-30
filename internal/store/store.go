@@ -98,20 +98,24 @@ type User struct {
 	AvatarURL    string
 	IsActive     bool
 	IsAdmin      bool
-	CreatedAt    time.Time
+	// EmailVerified reports whether email_verified_at is set. Nothing sets it
+	// yet — there is no mail delivery — so it is false for every account, and
+	// the id_token says so rather than claiming otherwise.
+	EmailVerified bool
+	CreatedAt     time.Time
 }
 
 type scanner interface{ Scan(...any) error }
 
-const userColumns = `id, name, email, COALESCE(phone, ''), password_hash, COALESCE(avatar_url, ''), is_active, is_admin, created_at`
+const userColumns = `id, name, email, COALESCE(phone, ''), password_hash, COALESCE(avatar_url, ''), is_active, is_admin, email_verified_at IS NOT NULL, created_at`
 
 // userColumnsQualified is the same list with a table alias, for queries that
 // join sessions to users.
-const userColumnsQualified = `u.id, u.name, u.email, COALESCE(u.phone, ''), u.password_hash, COALESCE(u.avatar_url, ''), u.is_active, u.is_admin, u.created_at`
+const userColumnsQualified = `u.id, u.name, u.email, COALESCE(u.phone, ''), u.password_hash, COALESCE(u.avatar_url, ''), u.is_active, u.is_admin, u.email_verified_at IS NOT NULL, u.created_at`
 
 func scanUser(row scanner) (User, error) {
 	var u User
-	if err := row.Scan(&u.ID, &u.Name, &u.Email, &u.Phone, &u.PasswordHash, &u.AvatarURL, &u.IsActive, &u.IsAdmin, &u.CreatedAt); err != nil {
+	if err := row.Scan(&u.ID, &u.Name, &u.Email, &u.Phone, &u.PasswordHash, &u.AvatarURL, &u.IsActive, &u.IsAdmin, &u.EmailVerified, &u.CreatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return User{}, ErrNotFound
 		}
@@ -394,6 +398,13 @@ func (s *Store) SessionUser(ctx context.Context, hash string) (User, error) {
 	return scanUser(s.db.QueryRowContext(ctx,
 		`SELECT `+userColumnsQualified+` FROM sessions s JOIN users u ON u.id = s.user_id
 		 WHERE s.token_hash = $1 AND s.expires_at > now() AND u.is_active`, hash))
+}
+
+// RevokeUserSessions signs a user out of every browser. Used by a password
+// reset, which must not leave an attacker's existing session alive.
+func (s *Store) RevokeUserSessions(ctx context.Context, userID int64) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = $1`, userID)
+	return err
 }
 
 // DeleteSession signs a browser out.

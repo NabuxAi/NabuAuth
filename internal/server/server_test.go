@@ -506,3 +506,89 @@ func (j *cookieJar) SetCookies(_ *url.URL, cookies []*http.Cookie) {
 }
 
 func (j *cookieJar) Cookies(*url.URL) []*http.Cookie { return j.cookies }
+
+func TestTokenEndpointThrottlesSecretGuesses(t *testing.T) {
+	ts, st := newTestServer(t)
+	seedUser(t, st, "user@nabuxai.com", "correct-horse-battery")
+
+	// The login form has always been throttled; the token endpoint was not, so a
+	// wrong client_secret could be retried without limit.
+	var lastError string
+	for i := 0; i < maxAttempts+1; i++ {
+		got := postForm(t, ts, "/oauth/token", url.Values{
+			"grant_type": {"client_credentials"},
+			"client_id":  {"meter"}, "client_secret": {"wrong"},
+		})
+		lastError, _ = got["error_description"].(string)
+	}
+	if !strings.Contains(lastError, "too many failed attempts") {
+		t.Fatalf("after %d wrong secrets the endpoint still answered %q", maxAttempts+1, lastError)
+	}
+
+	// The lockout must be specific to the failing client, not a way to deny
+	// service to every other app on the deployment.
+	other := postForm(t, ts, "/oauth/token", url.Values{
+		"grant_type": {"client_credentials"}, "scope": {"wallet"},
+		"client_id": {"testapp"}, "client_secret": {"test-confidential-secret"},
+	})
+	if other["access_token"] == nil {
+		t.Fatalf("a different client was locked out too: %v", other)
+	}
+}
+
+func TestEmailVerifiedReflectsRealityNotAnAssumption(t *testing.T) {
+	ts, st := newTestServer(t)
+	seedUser(t, st, "user@nabuxai.com", "correct-horse-battery")
+	client := signIn(t, ts, "user@nabuxai.com", "correct-horse-battery")
+	code := grantCode(t, ts, client, "testapp", "http://app.test/callback", "openid email", "", "")
+
+	tok := postForm(t, ts, "/oauth/token", url.Values{
+		"grant_type": {"authorization_code"}, "code": {code},
+		"client_id": {"testapp"}, "client_secret": {"test-confidential-secret"},
+	})
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/user", nil)
+	req.Header.Set("Authorization", "Bearer "+tok["access_token"].(string))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("userinfo: %v", err)
+	}
+	defer resp.Body.Close()
+	var profile map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&profile); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	// Nothing verifies an address yet, so claiming it was verified would tell
+	// every consuming app something untrue.
+	if profile["email_verified"] != false {
+		t.Fatalf("email_verified = %v for an unverified address", profile["email_verified"])
+	}
+}
+
+func TestRevokeUserSessionsSignsEveryBrowserOut(t *testing.T) {
+	ts, st := newTestServer(t)
+	user := seedUser(t, st, "user@nabuxai.com", "correct-horse-battery")
+	client := signIn(t, ts, "user@nabuxai.com", "correct-horse-battery")
+
+	resp, err := client.Get(ts.URL + "/dashboard")
+	if err != nil {
+		t.Fatalf("dashboard: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected a live session, got %d", resp.StatusCode)
+	}
+
+	// A password reset revokes sessions; leaving an intruder's alive would
+	// defeat the point of resetting.
+	if err := st.RevokeUserSessions(context.Background(), user.ID); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+	resp, err = client.Get(ts.URL + "/dashboard")
+	if err != nil {
+		t.Fatalf("dashboard: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("the old session still works: got %d, want a redirect to login", resp.StatusCode)
+	}
+}

@@ -3,6 +3,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"flag"
 	"fmt"
@@ -13,6 +15,8 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"nabuauth/internal/config"
 	"nabuauth/internal/server"
 	"nabuauth/internal/store"
@@ -21,6 +25,11 @@ import (
 
 func main() {
 	configPath := flag.String("config", envOr("NABUAUTH_CONFIG", "apps.yaml"), "path to the YAML config file")
+	// There is no email-based password reset: this deployment has no outbound
+	// mail, so a reset link would be a flow that can never complete. An operator
+	// with shell access recovers an account instead — which is the same trust
+	// boundary, since that operator can already read the database.
+	resetEmail := flag.String("reset-password", "", "set a new password for this account, print it, and exit")
 	flag.Parse()
 
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -46,6 +55,14 @@ func main() {
 		os.Exit(1)
 	}
 	defer st.Close()
+
+	if *resetEmail != "" {
+		if err := resetPassword(ctx, st, *resetEmail); err != nil {
+			log.Error("could not reset the password", "email", *resetEmail, "error", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	keys, err := loadKeyring(ctx, st)
 	if err != nil {
@@ -115,6 +132,46 @@ func main() {
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		log.Warn("shutdown", "error", err)
 	}
+}
+
+// resetPassword sets a fresh random password on an account and prints it once.
+//
+// A generated password is printed rather than read from a flag on purpose: a
+// password typed on the command line ends up in the shell history and in the
+// process list, where anyone on the box can read it.
+func resetPassword(ctx context.Context, st *store.Store, email string) error {
+	user, err := st.UserByEmail(ctx, email)
+	if err != nil {
+		return fmt.Errorf("no account with that email: %w", err)
+	}
+
+	buf := make([]byte, 18)
+	if _, err := rand.Read(buf); err != nil {
+		return err
+	}
+	password := base64.RawURLEncoding.EncodeToString(buf)
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	if err := st.SetPassword(ctx, user.ID, string(hash)); err != nil {
+		return err
+	}
+	// Every existing session and refresh token is killed: a password reset is
+	// also the lever for "someone else is in my account", and leaving their
+	// session alive would defeat it.
+	if err := st.RevokeUserSessions(ctx, user.ID); err != nil {
+		return err
+	}
+	if err := st.RevokeUserTokens(ctx, user.ID); err != nil {
+		return err
+	}
+
+	fmt.Printf("Password for %s reset to: %s\n", user.Email, password)
+	fmt.Println("Every existing session and refresh token for this account has been revoked.")
+	fmt.Println("Sign in and change it from the account page.")
+	return nil
 }
 
 // loadKeyring reads the signing keys, generating one on first boot so a fresh

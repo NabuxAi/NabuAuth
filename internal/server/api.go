@@ -53,7 +53,7 @@ func (s *Server) handleUserInfo(w http.ResponseWriter, r *http.Request) {
 	// scope for them; a "profile"-only token must not leak contact details.
 	if claims.HasScope("email") {
 		body["email"] = user.Email
-		body["email_verified"] = true
+		body["email_verified"] = user.EmailVerified
 	}
 	if claims.HasScope("profile") {
 		body["phone"] = user.Phone

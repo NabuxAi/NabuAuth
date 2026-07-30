@@ -339,8 +339,17 @@ func (s *Server) authenticateClient(r *http.Request) (store.Client, error) {
 	if clientID == "" {
 		return store.Client{}, errors.New("client_id is required")
 	}
+	// Throttled per client and source address. A client secret is high-entropy
+	// so brute force was never the realistic threat, but an unlimited endpoint
+	// happily absorbs credential-stuffing traffic and logs nothing useful.
+	throttleKey := "client:" + clientID + "|" + clientIP(r)
+	if s.throttle.blocked(throttleKey) {
+		return store.Client{}, errors.New("too many failed attempts for this client; try again later")
+	}
+
 	client, err := s.store.ClientByID(r.Context(), clientID)
 	if err != nil {
+		s.throttle.fail(throttleKey)
 		return store.Client{}, errors.New("unknown client")
 	}
 	if !client.IsConfidential {
@@ -350,8 +359,10 @@ func (s *Server) authenticateClient(r *http.Request) (store.Client, error) {
 		return store.Client{}, errors.New("client has no secret configured on the server")
 	}
 	if subtle.ConstantTimeCompare([]byte(tokens.HashOpaque(secret)), []byte(client.SecretHash)) != 1 {
+		s.throttle.fail(throttleKey)
 		return store.Client{}, errors.New("invalid client_secret")
 	}
+	s.throttle.reset(throttleKey)
 	return client, nil
 }
 
@@ -545,7 +556,7 @@ func (s *Server) writeTokenResponse(w http.ResponseWriter, r *http.Request, clie
 			Nonce:         nonce,
 			Name:          user.Name,
 			Email:         user.Email,
-			EmailVerified: true,
+			EmailVerified: user.EmailVerified,
 			Picture:       user.AvatarURL,
 		})
 		if err != nil {

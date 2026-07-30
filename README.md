@@ -120,6 +120,22 @@ go run ./cmd/nabuauth -config apps.local.yaml
 production, sign-up is closed except while the database holds no accounts at
 all, so the first person to reach a fresh deployment claims it as administrator.
 
+## Recovering an account
+
+There is no email-based password reset: the deployment has no outbound mail, so a
+reset link would be a flow that can never complete. An operator with shell access
+resets the password instead — the same trust boundary, since that operator can
+already read the database.
+
+```bash
+docker compose exec app /app/nabuauth -reset-password you@example.com
+```
+
+It prints a freshly generated password once (rather than taking one as an
+argument, which would leave it in the shell history and the process list) and
+revokes every existing session and refresh token for that account — a reset is
+also the lever for "someone else is in my account".
+
 ## Deployment
 
 `docker compose up` builds the image and starts Postgres alongside it. The
