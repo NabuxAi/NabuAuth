@@ -30,6 +30,12 @@ var ErrDuplicate = errors.New("duplicate")
 // ErrInsufficientFunds is returned when a debit would overdraw the wallet.
 var ErrInsufficientFunds = errors.New("insufficient funds")
 
+// ErrReplayed is returned when a refresh token that was already rotated out is
+// presented again. Distinct from ErrNotFound because it means something went
+// wrong that an operator should hear about: a token leaked, and the whole
+// family has just been revoked in response.
+var ErrReplayed = errors.New("refresh token replayed")
+
 // Store is the database handle plus the queries NabuAuth needs.
 type Store struct {
 	db *sql.DB
@@ -343,32 +349,85 @@ type RefreshToken struct {
 	ClientID string
 	UserID   int64
 	Scopes   []string
+	// FamilyID ties every token rotated out of one login together. Empty only
+	// for rows written before the column existed.
+	FamilyID string
 }
 
-// SaveRefreshToken stores a hashed refresh token.
+// SaveRefreshToken stores a hashed refresh token. familyID is the root token's
+// hash: pass "" when this token starts a new family and it roots itself.
 func (s *Store) SaveRefreshToken(ctx context.Context, hash string, t RefreshToken, expiresAt time.Time) error {
+	family := t.FamilyID
+	if family == "" {
+		family = hash
+	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO oauth_refresh_tokens (token_hash, client_id, user_id, scopes, expires_at) VALUES ($1, $2, $3, $4, $5)`,
-		hash, t.ClientID, t.UserID, JoinList(t.Scopes), expiresAt)
+		`INSERT INTO oauth_refresh_tokens (token_hash, client_id, user_id, scopes, expires_at, family_id) VALUES ($1, $2, $3, $4, $5, $6)`,
+		hash, t.ClientID, t.UserID, JoinList(t.Scopes), expiresAt, family)
 	return err
 }
 
 // ConsumeRefreshToken revokes a refresh token and returns it, so the caller can
-// issue a replacement. Rotation means a stolen refresh token works at most once,
-// and the theft surfaces as the legitimate client suddenly failing.
+// issue a replacement. Rotation means a stolen refresh token works at most once.
+//
+// Rotation alone is not enough, though. When a rotated token comes back a second
+// time, two parties hold tokens descended from one login and the server cannot
+// tell which of them is the thief — so it revokes the whole family and makes
+// both re-authenticate, which is what RFC 9700 §4.14.2 asks for. Refusing the
+// replay while leaving its successor alive would only lock out whoever arrived
+// second, and that is as likely to be the legitimate client as the attacker.
 func (s *Store) ConsumeRefreshToken(ctx context.Context, hash string) (RefreshToken, error) {
 	var t RefreshToken
 	var scopes string
+	var family sql.NullString
 	err := s.db.QueryRowContext(ctx, `
 		UPDATE oauth_refresh_tokens SET revoked_at = now()
 		WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now()
-		RETURNING client_id, user_id, scopes`, hash).
-		Scan(&t.ClientID, &t.UserID, &scopes)
+		RETURNING client_id, user_id, scopes, family_id`, hash).
+		Scan(&t.ClientID, &t.UserID, &scopes, &family)
 	if errors.Is(err, sql.ErrNoRows) {
+		if replayed, rerr := s.revokeFamilyOfReplayedToken(ctx, hash); rerr == nil && replayed {
+			return RefreshToken{}, ErrReplayed
+		}
 		return RefreshToken{}, ErrNotFound
 	}
 	t.Scopes = SplitList(scopes)
+	t.FamilyID = family.String
 	return t, err
+}
+
+// revokeFamilyOfReplayedToken reports whether the hash belongs to a token we
+// once issued and have already revoked — a replay — and if so kills every other
+// live token from the same login. An unknown hash is not a replay: it is a
+// guess, and revoking anything on a guess would hand anyone a way to sign other
+// people out.
+func (s *Store) revokeFamilyOfReplayedToken(ctx context.Context, hash string) (bool, error) {
+	var family sql.NullString
+	var clientID string
+	var userID int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT family_id, client_id, user_id FROM oauth_refresh_tokens WHERE token_hash = $1`, hash).
+		Scan(&family, &clientID, &userID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+
+	if family.Valid && family.String != "" {
+		_, err = s.db.ExecContext(ctx,
+			`UPDATE oauth_refresh_tokens SET revoked_at = now() WHERE family_id = $1 AND revoked_at IS NULL`,
+			family.String)
+		return true, err
+	}
+	// Issued before families existed, so the descendants cannot be identified.
+	// Revoking this client's tokens for this user is broader than necessary but
+	// errs the safe way, and the set shrinks to nothing as old tokens expire.
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE oauth_refresh_tokens SET revoked_at = now() WHERE client_id = $1 AND user_id = $2 AND revoked_at IS NULL`,
+		clientID, userID)
+	return true, err
 }
 
 // RevokeRefreshToken marks a single refresh token revoked, ignoring unknown

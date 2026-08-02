@@ -62,6 +62,15 @@ CREATE TABLE IF NOT EXISTS oauth_refresh_tokens (
 
 CREATE INDEX IF NOT EXISTS oauth_refresh_tokens_user_idx ON oauth_refresh_tokens (user_id);
 
+-- Every token minted from one login shares a family: the root token's hash.
+-- Rotation carries it forward, so presenting an already-rotated token is proof
+-- that two parties hold tokens from the same login and lets us revoke all of
+-- them. Nullable because rows issued before this column existed have no family;
+-- those fall back to revoking the user's tokens for that client.
+ALTER TABLE oauth_refresh_tokens ADD COLUMN IF NOT EXISTS family_id TEXT;
+
+CREATE INDEX IF NOT EXISTS oauth_refresh_tokens_family_idx ON oauth_refresh_tokens (family_id);
+
 -- Browser sessions for the NabuAuth login screen itself. Separate from OAuth
 -- tokens: this cookie proves "the user is signed in here", nothing more.
 CREATE TABLE IF NOT EXISTS sessions (

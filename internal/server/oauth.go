@@ -174,6 +174,17 @@ func (s *Server) parseAuthRequest(w http.ResponseWriter, r *http.Request, q url.
 		s.redirectError(w, r, req, "invalid_request", "code_challenge is required for public clients")
 		return authRequest{}, false
 	}
+	// ...and it has to be the hashed form. With `plain` the verifier *is* the
+	// challenge, and the challenge travels in the authorize URL — through the
+	// address bar, browser history, referrers and every proxy log on the way. An
+	// attacker who can read the code from the redirect can generally read that
+	// URL too, which is exactly the attacker PKCE exists to stop. Confidential
+	// clients may still use `plain`: their secret, not the challenge, is what
+	// protects the exchange.
+	if !client.IsConfidential && req.ChallengeMethod != "S256" {
+		s.redirectError(w, r, req, "invalid_request", "public clients must use code_challenge_method=S256")
+		return authRequest{}, false
+	}
 	return req, true
 }
 
@@ -403,7 +414,7 @@ func (s *Server) grantAuthorizationCode(w http.ResponseWriter, r *http.Request) 
 		oauthError(w, http.StatusBadRequest, "invalid_grant", "the account is no longer active")
 		return
 	}
-	s.writeTokenResponse(w, r, client, user, code.Scopes, code.Nonce)
+	s.writeTokenResponse(w, r, client, user, code.Scopes, code.Nonce, "")
 }
 
 func (s *Server) grantRefreshToken(w http.ResponseWriter, r *http.Request) {
@@ -420,6 +431,13 @@ func (s *Server) grantRefreshToken(w http.ResponseWriter, r *http.Request) {
 	}
 	rt, err := s.store.ConsumeRefreshToken(r.Context(), tokens.HashOpaque(raw))
 	if err != nil {
+		if errors.Is(err, store.ErrReplayed) {
+			// The store has already revoked the family. Say so here, because a
+			// rotated token coming back is the one signal that a refresh token
+			// leaked, and until now it went nowhere an operator could see.
+			s.log.Warn("refresh token replayed; revoked every token from that login",
+				"client_id", client.ClientID, "ip", clientIP(r))
+		}
 		oauthError(w, http.StatusBadRequest, "invalid_grant", "the refresh token is unknown, expired or already used")
 		return
 	}
@@ -447,7 +465,7 @@ func (s *Server) grantRefreshToken(w http.ResponseWriter, r *http.Request) {
 		oauthError(w, http.StatusBadRequest, "invalid_grant", "the account is no longer active")
 		return
 	}
-	s.writeTokenResponse(w, r, client, user, scopes, "")
+	s.writeTokenResponse(w, r, client, user, scopes, "", rt.FamilyID)
 }
 
 // grantClientCredentials issues a service token with no user behind it. This is
@@ -500,7 +518,9 @@ func (s *Server) grantClientCredentials(w http.ResponseWriter, r *http.Request) 
 
 // writeTokenResponse mints the access token, the rotating refresh token and,
 // for an openid request, the id_token.
-func (s *Server) writeTokenResponse(w http.ResponseWriter, r *http.Request, client store.Client, user store.User, scopes []string, nonce string) {
+// familyID ties the issued refresh token to an existing login; pass "" when
+// this token starts a new family.
+func (s *Server) writeTokenResponse(w http.ResponseWriter, r *http.Request, client store.Client, user store.User, scopes []string, nonce string, familyID string) {
 	now := time.Now()
 	subject := strconv.FormatInt(user.ID, 10)
 	scopeStr := store.JoinList(scopes)
@@ -538,6 +558,7 @@ func (s *Server) writeTokenResponse(w http.ResponseWriter, r *http.Request, clie
 		ClientID: client.ClientID,
 		UserID:   user.ID,
 		Scopes:   scopes,
+		FamilyID: familyID,
 	}, now.Add(s.refreshTTL)); err != nil {
 		s.log.Error("save refresh token", "error", err)
 		oauthError(w, http.StatusInternalServerError, "server_error", "could not issue a refresh token")
