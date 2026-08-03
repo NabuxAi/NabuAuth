@@ -2,8 +2,23 @@
 
 NabuAuth is the OAuth 2.0 / OpenID Connect identity provider every Nabu product
 signs users in with, plus the shared prepaid wallet those products spend from.
-One account at `auth.nabuxai.com` works in NabuDesk, NabuGen, NabuGate,
-NabuVoice, NabuWrite, NabuSu, NabuWatch and the Nabux store.
+One account at `auth.nabuxai.com` signs a user in to every application
+registered in `apps.yaml`. That list, and nothing else, is what works today:
+
+<!-- registered-apps:begin -->
+- NabuGate AI
+- NabuDesk
+- NabuGen
+- NabuVoice
+- NabuWrite
+- ReelMind
+<!-- registered-apps:end -->
+
+The markers are not decoration: a test reads the list between them and compares
+it to `apps.yaml`, because this sentence used to name NabuSu, NabuWatch and the
+Nabux store — none of which has ever contained a single reference to NabuAuth.
+A README that lists an integration nobody built is worse than one that lists
+none, because it is the thing someone reads before deciding not to build it.
 
 Written in Go with the standard library, a Postgres driver and bcrypt. It builds
 to a single static binary and ships as a distroless image.
