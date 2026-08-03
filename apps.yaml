@@ -82,6 +82,19 @@ apps:
     scopes: [openid, profile, email, wallet, offline]
     secret_env: NABUAUTH_SECRET_NABUWRITE
 
+  - id: reelmind
+    name: ReelMind
+    description: Instagram archives turned into a searchable knowledge base
+    icon: film
+    url: https://reelmind.nabuxai.com
+    badge: Active
+    redirect_uris:
+      - https://reelmind.nabuxai.com/panel/auth/callback
+    # No wallet: ReelMind's AI spend is metered by NabuGate against its own
+    # project token, so an operator's wallet is not involved.
+    scopes: [openid, profile, email, offline]
+    secret_env: NABUAUTH_SECRET_REELMIND
+
 # Not yet registered, because they have no sign-in callback to register:
 #
 #   nabusu       — no account system at all; it is a local companion talking to
