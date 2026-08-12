@@ -13,7 +13,10 @@ server:
   code_ttl: 10m
   # Off means an administrator creates accounts. The sign-up form stays reachable
   # while the database has no users at all, so a fresh deployment can be claimed.
-  allow_registration: false
+  #
+  # Read from the environment so a deployment can open or close sign-up without
+  # a code change. Unset expands to empty, which is off — the safe default.
+  allow_registration: ${NABUAUTH_ALLOW_REGISTRATION}
 
 # Every scope an app may request, with the sentence the user reads on the
 # consent screen. An app requesting a scope that is not listed here is refused.

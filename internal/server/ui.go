@@ -94,6 +94,10 @@ func (s *Server) handleLoginForm(w http.ResponseWriter, r *http.Request) {
 	s.render(w, http.StatusOK, "login.html", map[string]any{
 		"Title": "Sign in to Nabu",
 		"Next":  next,
+		// The template offers a "create one" link when sign-up is open. It was
+		// never passed, so an open deployment still hid the only way in for
+		// someone who had no account yet.
+		"AllowRegistration": s.registrationOpen(r),
 	})
 }
 
@@ -109,10 +113,11 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 
 	fail := func(msg string) {
 		s.render(w, http.StatusUnauthorized, "login.html", map[string]any{
-			"Title": "Sign in to Nabu",
-			"Next":  next,
-			"Email": email,
-			"Error": msg,
+			"Title":             "Sign in to Nabu",
+			"Next":              next,
+			"Email":             email,
+			"Error":             msg,
+			"AllowRegistration": s.registrationOpen(r),
 		})
 	}
 
