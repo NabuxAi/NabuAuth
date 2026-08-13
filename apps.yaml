@@ -22,6 +22,40 @@ server:
   # the database has no users at all, so a fresh deployment can be claimed.
   allow_registration: ${NABUAUTH_ALLOW_REGISTRATION}
 
+# Signing in with a phone number and a one-time code, beside the email form and
+# the external providers. The gateway is NabuSms, and the key is the name of an
+# environment variable — never the value, on the same terms as every app secret
+# in this file.
+#
+# The phone field appears on the sign-in form only once base_url and the key are
+# both present. A field with no gateway behind it would tell somebody a code is
+# on its way when nothing was sent, which is worse than not offering the option.
+#
+# Two routes, not one: the gateway's `otp` route is declared for Iranian numbers
+# only and refuses anything else before a provider is tried, and the provider on
+# `international` has no message patterns — so a foreign number is carried as
+# plain text on the second route. NabuSms must also grant this key both routes,
+# or every send comes back "this key may not use route otp".
+#
+# `countries` fills the selector beside the field; the default is the set the
+# gateway is known to route. A deployment sending somewhere else lists its own —
+# the point of the selector is that the country is a setting, not a number baked
+# into the form.
+sms:
+  base_url: ${NABUAUTH_SMS_URL}
+  key_env: NABUAUTH_SMS_KEY
+  route: otp
+  international_route: international
+  template: otp
+  # The placeholder inside the pattern that the code fills. `token` is always
+  # sent alongside whatever is named here, because Kavenegar's lookup endpoint
+  # accepts no other name and refuses the message without it — so this only ever
+  # needs to name the *extra* placeholder a provider wants.
+  code_param: code
+  default_country: "98"
+  code_ttl: 5m
+  resend_after: 60s
+
 # Every scope an app may request, with the sentence the user reads on the
 # consent screen. An app requesting a scope that is not listed here is refused.
 scopes:

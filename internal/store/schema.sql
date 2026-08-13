@@ -15,6 +15,30 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- A phone that proved itself is a way in, so the account has to record that the
+-- proof happened rather than trusting whatever string sits in the phone column.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_verified_at TIMESTAMPTZ;
+
+-- An account whose only identifier is a verified phone number has no email, and
+-- inventing one would be a fabricated address that email_verified:false would
+-- then be lying about. Dropping a NOT NULL that is already dropped is a no-op,
+-- so this is safe on every boot.
+ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
+
+-- One-time codes for phone sign-in. Keyed by the number rather than by a user:
+-- the code is asked for before anyone knows whether an account exists, and this
+-- table must not become the place to ask. Only the hash is stored, for the same
+-- reason authorization codes are hashed — a database dump must not be enough to
+-- redeem a code that is still inside its window. The primary key on phone means
+-- a resend replaces the live code instead of leaving several valid at once.
+CREATE TABLE IF NOT EXISTS phone_codes (
+    phone      TEXT PRIMARY KEY,
+    code_hash  TEXT        NOT NULL,
+    attempts   INT         NOT NULL DEFAULT 0,
+    sent_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at TIMESTAMPTZ NOT NULL
+);
+
 -- Registered ecosystem apps. Rows are upserted from apps.yaml on boot, so the
 -- config file — not a dashboard click — is the source of truth for who may sign
 -- users in.

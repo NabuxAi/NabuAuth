@@ -38,7 +38,7 @@ func newTestServer(t *testing.T, tweaks ...func(*config.Config)) (*httptest.Serv
 	t.Cleanup(func() { st.Close() })
 
 	// Start from a clean slate; TRUNCATE cascades through every dependent table.
-	if _, err := st.DB().ExecContext(ctx, `TRUNCATE users, oauth_clients, signing_keys RESTART IDENTITY CASCADE`); err != nil {
+	if _, err := st.DB().ExecContext(ctx, `TRUNCATE users, oauth_clients, signing_keys, phone_codes RESTART IDENTITY CASCADE`); err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
 

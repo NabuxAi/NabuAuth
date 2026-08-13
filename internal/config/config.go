@@ -22,6 +22,86 @@ type Config struct {
 	// form. Each is an ordinary OIDC provider, so one implementation serves
 	// Google, Microsoft, an enterprise IdP or another Nabu deployment.
 	LoginMethods []Provider `yaml:"login_methods"`
+
+	// Sms is the gateway that carries one-time codes. Configured on the same
+	// terms as a login method: the key is the name of an env var, and the phone
+	// field is not offered at all until the deployment has one.
+	Sms Sms `yaml:"sms"`
+}
+
+// Sms points at the NabuSms gateway and says how to address it.
+type Sms struct {
+	// BaseURL is the gateway root; the send endpoint is <BaseURL>/v1/messages.
+	BaseURL string `yaml:"base_url"`
+
+	// KeyEnv names the env var holding the bearer key, on the same terms as an
+	// app's secret: the value never appears in the file.
+	KeyEnv string `yaml:"key_env"`
+
+	// Route is the gateway route for Iranian numbers and InternationalRoute the
+	// one for everything else. They are two routes rather than one because the
+	// domestic panels are declared IR-only at the gateway and refuse a foreign
+	// number before any provider is tried, while the international provider
+	// carries no message templates at all.
+	Route              string `yaml:"route"`
+	InternationalRoute string `yaml:"international_route"`
+
+	// Template is the pattern name the domestic route sends, and CodeParam the
+	// placeholder inside it that the code fills.
+	Template  string `yaml:"template"`
+	CodeParam string `yaml:"code_param"`
+
+	// Text is the message body used on the international route, where there are
+	// no patterns. {code} is replaced with the code.
+	Text string `yaml:"text"`
+
+	// DefaultCountry is the calling code assumed when the visitor picks nothing.
+	DefaultCountry string `yaml:"default_country"`
+
+	// CodeTTL is how long a sent code stays usable, and ResendAfter how long a
+	// visitor must wait before another one is sent to the same number.
+	CodeTTL     string `yaml:"code_ttl"`
+	ResendAfter string `yaml:"resend_after"`
+
+	// Countries fills the selector beside the phone field. A deployment can list
+	// more; the default is the set the gateway is known to route.
+	Countries []Country `yaml:"countries"`
+}
+
+// Country is one entry in the selector beside the phone field.
+type Country struct {
+	// Code is the ISO-3166-1 alpha-2 code, which is what the gateway's own
+	// country lookup speaks; Dial is the E.164 calling code with no '+', which
+	// is what its default_country field takes.
+	Code string `yaml:"code"`
+	Dial string `yaml:"dial"`
+	Name string `yaml:"name"`
+}
+
+// Key returns the gateway's bearer key from its env var.
+func (s Sms) Key() string {
+	if s.KeyEnv == "" {
+		return ""
+	}
+	return os.Getenv(s.KeyEnv)
+}
+
+// Configured reports whether codes can actually be sent. A phone field on a
+// deployment with no gateway would claim a code was sent when nothing was, which
+// is the failure this whole path exists to avoid.
+func (s Sms) Configured() bool { return s.BaseURL != "" && s.Key() != "" }
+
+// DialFor returns the calling code for an ISO country code, falling back to the
+// configured default so an unrecognised selection cannot silently mean "no
+// country" and turn a national number into a foreign one.
+func (s Sms) DialFor(iso string) string {
+	iso = strings.ToUpper(strings.TrimSpace(iso))
+	for _, c := range s.Countries {
+		if c.Code == iso {
+			return c.Dial
+		}
+	}
+	return s.DefaultCountry
 }
 
 // Provider is one external sign-in method.
@@ -151,6 +231,60 @@ func (c *Config) applyDefaults() {
 			c.LoginMethods[i].Scopes = []string{"openid", "email", "profile"}
 		}
 	}
+	c.Sms.ApplyDefaults()
+}
+
+// DefaultCountries is the selector's contents when the config lists none: the
+// calling codes the SMS gateway is known to route. A deployment that sends
+// somewhere else lists its own — the point of the selector is that this is a
+// setting rather than a country baked into the form.
+var DefaultCountries = []Country{
+	{Code: "IR", Dial: "98", Name: "Iran"},
+	{Code: "OM", Dial: "968", Name: "Oman"},
+	{Code: "AE", Dial: "971", Name: "United Arab Emirates"},
+	{Code: "QA", Dial: "974", Name: "Qatar"},
+	{Code: "BH", Dial: "973", Name: "Bahrain"},
+	{Code: "KW", Dial: "965", Name: "Kuwait"},
+	{Code: "SA", Dial: "966", Name: "Saudi Arabia"},
+	{Code: "TR", Dial: "90", Name: "Türkiye"},
+	{Code: "DE", Dial: "49", Name: "Germany"},
+	{Code: "GB", Dial: "44", Name: "United Kingdom"},
+	{Code: "US", Dial: "1", Name: "United States"},
+}
+
+// ApplyDefaults fills in everything the gateway block does not have to say.
+// Exported because Load is not the only way a Config is built — a caller
+// assembling one in code gets the same routes, wording and country list as a
+// deployment reading the file, rather than a half-configured gateway.
+func (s *Sms) ApplyDefaults() {
+	if s.Route == "" {
+		s.Route = "otp"
+	}
+	if s.InternationalRoute == "" {
+		s.InternationalRoute = "international"
+	}
+	if s.Template == "" {
+		s.Template = "otp"
+	}
+	if s.CodeParam == "" {
+		s.CodeParam = "code"
+	}
+	if s.Text == "" {
+		s.Text = "Your Nabu sign-in code is {code}. It expires in a few minutes."
+	}
+	if s.DefaultCountry == "" {
+		s.DefaultCountry = "98"
+	}
+	if s.CodeTTL == "" {
+		s.CodeTTL = "5m"
+	}
+	if s.ResendAfter == "" {
+		s.ResendAfter = "60s"
+	}
+	if len(s.Countries) == 0 {
+		s.Countries = DefaultCountries
+	}
+	s.BaseURL = strings.TrimRight(s.BaseURL, "/")
 }
 
 // EnabledLoginMethods are the providers a deployment has actually configured.
@@ -209,6 +343,11 @@ func (c *Config) validate() error {
 			return fmt.Errorf("login_method %q: duplicate id", p.ID)
 		}
 		seenProvider[p.ID] = true
+		// "phone" is the built-in method's own path segment. A provider claiming
+		// it would put two different sign-ins under one URL.
+		if p.ID == "phone" {
+			return fmt.Errorf("login_method %q: that id belongs to the built-in phone sign-in", p.ID)
+		}
 		// A provider reached over plaintext hands the code, the secret and the
 		// user's identity to whoever is on the wire.
 		for _, u := range []string{p.AuthorizeURL, p.TokenURL, p.UserinfoURL} {
@@ -218,20 +357,39 @@ func (c *Config) validate() error {
 		}
 	}
 
+	// The gateway carries a bearer key and a phone number. Plaintext there hands
+	// both to whoever is on the wire, and the code with them.
+	if c.Sms.BaseURL != "" && !strings.HasPrefix(c.Sms.BaseURL, "https://") &&
+		!strings.HasPrefix(c.Sms.BaseURL, "http://127.0.0.1") && !strings.HasPrefix(c.Sms.BaseURL, "http://localhost") {
+		return fmt.Errorf("sms.base_url: %q is not https", c.Sms.BaseURL)
+	}
+	for _, country := range c.Sms.Countries {
+		if len(country.Code) != 2 {
+			return fmt.Errorf("sms.countries: %q is not an ISO-3166-1 alpha-2 code", country.Code)
+		}
+		// The dial code is concatenated onto the typed digits. A '+' or a space
+		// in it would produce a number no gateway can read.
+		if country.Dial == "" || strings.Trim(country.Dial, "0123456789") != "" {
+			return fmt.Errorf("sms.countries: %q has dial %q, which is not bare digits", country.Code, country.Dial)
+		}
+	}
+
 	for _, d := range []struct {
 		name  string
 		value string
 	}{
-		{"access_token_ttl", c.Server.AccessTokenTTL},
-		{"refresh_token_ttl", c.Server.RefreshTokenTTL},
-		{"session_ttl", c.Server.SessionTTL},
-		{"code_ttl", c.Server.CodeTTL},
+		{"server.access_token_ttl", c.Server.AccessTokenTTL},
+		{"server.refresh_token_ttl", c.Server.RefreshTokenTTL},
+		{"server.session_ttl", c.Server.SessionTTL},
+		{"server.code_ttl", c.Server.CodeTTL},
+		{"sms.code_ttl", c.Sms.CodeTTL},
+		{"sms.resend_after", c.Sms.ResendAfter},
 	} {
 		if d.value == "" {
 			continue
 		}
 		if _, err := time.ParseDuration(d.value); err != nil {
-			return fmt.Errorf("server.%s: %w", d.name, err)
+			return fmt.Errorf("%s: %w", d.name, err)
 		}
 	}
 	return nil

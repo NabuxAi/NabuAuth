@@ -20,7 +20,7 @@
     <input type="hidden" name="next" value="{{.Next}}">
     <label>
       <span>Email</span>
-      <input type="email" name="email" value="{{.Email}}" autocomplete="username" inputmode="email" required autofocus>
+      <input type="email" name="email" value="{{.Email}}" autocomplete="username" inputmode="email" required{{if not .CodeSent}} autofocus{{end}}>
     </label>
     <label>
       <span>Password</span>
@@ -33,6 +33,56 @@
   <p class="muted hint">First time here? Entering an email no Nabu account uses creates one, with the password you type. There is nothing else to fill in.</p>
   {{else}}
   <p class="muted hint">Nabu accounts are created by an administrator. Ask your team to invite you.</p>
+  {{end}}
+
+  {{/* The phone half. It is rendered only where a gateway is configured: a field
+       that cannot send a code would tell somebody a code is on its way when
+       none is, which is worse than not offering the option. */}}
+  {{if .Sms}}
+  <div class="divider"><span>or use your phone</span></div>
+
+  {{if .PhoneError}}<p class="alert" role="alert">{{.PhoneError}}</p>{{end}}
+  {{if and .PhoneNotice (not .PhoneError)}}<p class="notice">{{.PhoneNotice}}</p>{{end}}
+
+  {{if .CodeSent}}
+  <form method="post" action="/login/phone/verify" class="form">
+    <input type="hidden" name="next" value="{{.Next}}">
+    <input type="hidden" name="phone" value="{{.Phone}}">
+    <input type="hidden" name="country" value="{{.Country}}">
+    <label>
+      <span>The code sent to {{.Phone}}</span>
+      <input type="text" name="code" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="8" required autofocus>
+    </label>
+    <button type="submit" class="primary">Sign in</button>
+  </form>
+  <form method="post" action="/login/phone" class="form resend">
+    <input type="hidden" name="next" value="{{.Next}}">
+    <input type="hidden" name="phone" value="{{.Phone}}">
+    <input type="hidden" name="country" value="{{.Country}}">
+    <button type="submit" class="ghost small">Send another code</button>
+  </form>
+  {{else}}
+  <form method="post" action="/login/phone" class="form">
+    <input type="hidden" name="next" value="{{.Next}}">
+    <label>
+      <span>Phone number</span>
+      {{/* A native select and a plain input, working with no JavaScript at all:
+           this form is the one page that must never depend on a script having
+           loaded. */}}
+      <span class="phone-field">
+        <select name="country" aria-label="Country calling code">
+          {{$selected := .Country}}
+          {{range .Countries}}
+          <option value="{{.Code}}"{{if eq .Code $selected}} selected{{end}}>{{.Name}} +{{.Dial}}</option>
+          {{end}}
+        </select>
+        <input type="tel" name="phone" inputmode="tel" autocomplete="tel" required>
+      </span>
+    </label>
+    <button type="submit" class="primary">Send me a code</button>
+  </form>
+  <p class="muted hint">We send a one-time code by SMS. Choose the country your number belongs to — the code will not arrive if it is dialled as another country's.</p>
+  {{end}}
   {{end}}
 
   {{if .Providers}}

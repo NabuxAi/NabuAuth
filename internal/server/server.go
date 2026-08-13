@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"nabuauth/internal/config"
+	"nabuauth/internal/sms"
 	"nabuauth/internal/store"
 	"nabuauth/internal/tokens"
 	"nabuauth/web"
@@ -40,6 +41,13 @@ type Server struct {
 	sessionTTL time.Duration
 	codeTTL    time.Duration
 
+	// sms is nil unless the deployment configured a gateway, and every phone
+	// route checks it. Nil is what makes the phone field absent rather than
+	// present and broken.
+	sms         *sms.Client
+	phoneTTL    time.Duration
+	phoneResend time.Duration
+
 	throttle *throttle
 }
 
@@ -49,17 +57,24 @@ func New(cfg *config.Config, st *store.Store, keys *tokens.Keyring, log *slog.Lo
 	if err != nil {
 		return nil, err
 	}
+	var gateway *sms.Client
+	if cfg.Sms.Configured() {
+		gateway = sms.New(cfg.Sms)
+	}
 	return &Server{
-		cfg:        cfg,
-		store:      st,
-		keys:       keys,
-		log:        log,
-		tmpl:       tmpl,
-		accessTTL:  config.Duration(cfg.Server.AccessTokenTTL, time.Hour),
-		refreshTTL: config.Duration(cfg.Server.RefreshTokenTTL, 30*24*time.Hour),
-		sessionTTL: config.Duration(cfg.Server.SessionTTL, 30*24*time.Hour),
-		codeTTL:    config.Duration(cfg.Server.CodeTTL, 10*time.Minute),
-		throttle:   newThrottle(),
+		cfg:         cfg,
+		store:       st,
+		keys:        keys,
+		log:         log,
+		tmpl:        tmpl,
+		accessTTL:   config.Duration(cfg.Server.AccessTokenTTL, time.Hour),
+		refreshTTL:  config.Duration(cfg.Server.RefreshTokenTTL, 30*24*time.Hour),
+		sessionTTL:  config.Duration(cfg.Server.SessionTTL, 30*24*time.Hour),
+		codeTTL:     config.Duration(cfg.Server.CodeTTL, 10*time.Minute),
+		sms:         gateway,
+		phoneTTL:    config.Duration(cfg.Sms.CodeTTL, 5*time.Minute),
+		phoneResend: config.Duration(cfg.Sms.ResendAfter, time.Minute),
+		throttle:    newThrottle(),
 	}, nil
 }
 
@@ -99,6 +114,11 @@ func (s *Server) Handler() http.Handler {
 	// working rather than 404ing somebody mid-sign-in.
 	mux.HandleFunc("GET /register", s.handleRegisterRedirect)
 	mux.HandleFunc("POST /register", s.handleLoginSubmit)
+	// Phone sign-in: ask for a code, then type it back. Both are POST, so
+	// neither collides with the GET /login/{provider} pattern below, and the
+	// config refuses a provider whose id is "phone".
+	mux.HandleFunc("POST /login/phone", s.handlePhoneStart)
+	mux.HandleFunc("POST /login/phone/verify", s.handlePhoneVerify)
 	// External sign-in methods, one route pair for every provider a deployment
 	// configures.
 	mux.HandleFunc("GET /login/{provider}", s.handleProviderStart)

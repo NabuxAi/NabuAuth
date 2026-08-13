@@ -42,6 +42,9 @@ to a single static binary and ships as a distroless image.
 - **External sign-in methods** — any OIDC provider (Google, Microsoft, an
   enterprise IdP) configured in `login_methods`, matched to an account by the
   verified email it asserts.
+- **Phone sign-in** — a number, a country, and a one-time code by SMS, on the
+  same form. Offered only where an SMS gateway is configured, because a field
+  that cannot send a code would report one as sent.
 - **Account UI**: sign in, app launcher, wallet history.
 
 ## Endpoints
@@ -52,6 +55,8 @@ to a single static binary and ships as a distroless image.
 | `GET /oauth/jwks.json` | Public signing keys |
 | `GET /oauth/authorize` | Login and consent screen |
 | `GET /login` | The one sign-in form: signs in, or creates the account |
+| `POST /login/phone` | Send a one-time code to a phone number |
+| `POST /login/phone/verify` | Type the code back and sign in |
 | `GET /login/{provider}` | Start an external sign-in method |
 | `GET /login/{provider}/callback` | Finish one |
 | `POST /oauth/token` | `authorization_code`, `refresh_token`, `client_credentials` |
@@ -110,6 +115,8 @@ Environment:
 | `NABUAUTH_SECRET_*` | One client secret per app, named by its `secret_env` |
 | `NABUAUTH_ALLOW_REGISTRATION` | `true` lets an unknown email create its own account from the sign-in form |
 | `NABUAUTH_PROVIDER_SECRET_*` | One client secret per external sign-in method, named by its `secret_env` |
+| `NABUAUTH_SMS_URL` | NabuSms base URL; unset means phone sign-in is not offered |
+| `NABUAUTH_SMS_KEY` | NabuSms bearer key, named by `sms.key_env` |
 
 The RSA signing key is generated on first boot and stored in the database, so a
 fresh deployment issues valid tokens with no key ceremony and every replica signs
@@ -178,6 +185,25 @@ The method appears on the sign-in form only once all of that is present. An
 account is matched on the email the provider asserts and **only** when the
 provider says it verified that email — without that check, a provider that lets
 somebody type an address is a way into whichever Nabu account already uses it.
+
+## Turning phone sign-in on
+
+1. Point `sms.base_url` at NabuSms and set the key in the variable named by
+   `sms.key_env` (`NABUAUTH_SMS_KEY`).
+2. Grant that key **both** the `otp` and `international` routes in NabuSms.
+   The `otp` route is declared for Iranian numbers only and refuses anything
+   else before a provider is tried, so a foreign number is carried as plain
+   text on `international` instead — which is also why the country selector
+   chooses the route, not just the calling code.
+3. Redeploy. The field appears once the URL and the key are both present, and
+   the startup log says `phone_sign_in`.
+
+The selector's contents come from `sms.countries`; the default is the set the
+gateway is known to route, and a deployment that sends elsewhere lists its own.
+A verified number signs in whoever holds it, and creates the account where
+registration is open — with no email address, because inventing one would be a
+claim about a mailbox nobody owns. Where registration is closed, a number no
+account holds is answered exactly as a known one is and costs no message.
 
 ## Recovering an account
 

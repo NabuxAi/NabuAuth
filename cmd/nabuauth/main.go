@@ -96,12 +96,22 @@ func main() {
 	for _, a := range cfg.Apps {
 		appIDs = append(appIDs, a.ID)
 	}
+	// A half-configured gateway is the quiet failure: the phone field simply
+	// does not appear, and nothing distinguishes "this deployment has no SMS" —
+	// which is a fine thing to be — from "the key was left out of the compose
+	// file", which is not.
+	if cfg.Sms.BaseURL != "" && !cfg.Sms.Configured() {
+		log.Warn("an SMS gateway URL is configured but its key variable is empty; phone sign-in will not be offered",
+			"key_env", cfg.Sms.KeyEnv)
+	}
+
 	log.Info("nabuauth starting",
 		"port", cfg.Server.Port,
 		"issuer", cfg.Server.Issuer,
 		"signing_key", keys.SigningKID(),
 		"apps", appIDs,
 		"registration_open", cfg.Server.AllowRegistration,
+		"phone_sign_in", cfg.Sms.Configured(),
 	)
 
 	// Expired codes, tokens and sessions accumulate forever otherwise; the sweep

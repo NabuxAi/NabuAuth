@@ -108,20 +108,24 @@ type User struct {
 	// yet — there is no mail delivery — so it is false for every account, and
 	// the id_token says so rather than claiming otherwise.
 	EmailVerified bool
+	// PhoneVerified reports whether the number was proved by a one-time code
+	// sent to it. Unlike the email flag this one is really set, by the phone
+	// sign-in door, so an app that reads it hears something that happened.
+	PhoneVerified bool
 	CreatedAt     time.Time
 }
 
 type scanner interface{ Scan(...any) error }
 
-const userColumns = `id, name, email, COALESCE(phone, ''), password_hash, COALESCE(avatar_url, ''), is_active, is_admin, email_verified_at IS NOT NULL, created_at`
+const userColumns = `id, name, COALESCE(email, ''), COALESCE(phone, ''), password_hash, COALESCE(avatar_url, ''), is_active, is_admin, email_verified_at IS NOT NULL, phone_verified_at IS NOT NULL, created_at`
 
 // userColumnsQualified is the same list with a table alias, for queries that
 // join sessions to users.
-const userColumnsQualified = `u.id, u.name, u.email, COALESCE(u.phone, ''), u.password_hash, COALESCE(u.avatar_url, ''), u.is_active, u.is_admin, u.email_verified_at IS NOT NULL, u.created_at`
+const userColumnsQualified = `u.id, u.name, COALESCE(u.email, ''), COALESCE(u.phone, ''), u.password_hash, COALESCE(u.avatar_url, ''), u.is_active, u.is_admin, u.email_verified_at IS NOT NULL, u.phone_verified_at IS NOT NULL, u.created_at`
 
 func scanUser(row scanner) (User, error) {
 	var u User
-	if err := row.Scan(&u.ID, &u.Name, &u.Email, &u.Phone, &u.PasswordHash, &u.AvatarURL, &u.IsActive, &u.IsAdmin, &u.EmailVerified, &u.CreatedAt); err != nil {
+	if err := row.Scan(&u.ID, &u.Name, &u.Email, &u.Phone, &u.PasswordHash, &u.AvatarURL, &u.IsActive, &u.IsAdmin, &u.EmailVerified, &u.PhoneVerified, &u.CreatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return User{}, ErrNotFound
 		}
@@ -140,13 +144,19 @@ func (s *Store) CreateUser(ctx context.Context, name, email, phone, passwordHash
 	}
 	defer tx.Rollback()
 
-	var phoneArg any
+	// An account can be identified by either a mail address or a phone number,
+	// so both columns are NULL rather than empty when unused: '' would collide
+	// on the unique index the moment a second such account is made.
+	var phoneArg, emailArg any
 	if phone = strings.TrimSpace(phone); phone != "" {
 		phoneArg = phone
 	}
+	if email != "" {
+		emailArg = email
+	}
 	u, err := scanUser(tx.QueryRowContext(ctx,
 		`INSERT INTO users (name, email, phone, password_hash, is_admin) VALUES ($1, $2, $3, $4, $5) RETURNING `+userColumns,
-		name, email, phoneArg, passwordHash, isAdmin))
+		name, emailArg, phoneArg, passwordHash, isAdmin))
 	if err != nil {
 		if isUnique(err) {
 			return User{}, ErrDuplicate
@@ -162,7 +172,27 @@ func (s *Store) CreateUser(ctx context.Context, name, email, phone, passwordHash
 // UserByEmail looks an account up by its (case-insensitive) email.
 func (s *Store) UserByEmail(ctx context.Context, email string) (User, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
+	if email == "" {
+		// Phone-only accounts have no address. Looking one up with the empty
+		// string must find nothing rather than whichever of them sorts first.
+		return User{}, ErrNotFound
+	}
 	return scanUser(s.db.QueryRowContext(ctx, `SELECT `+userColumns+` FROM users WHERE email = $1`, email))
+}
+
+// UserByPhone looks an account up by its stored number. The argument is E.164
+// with a leading '+', which is the one canonical form written to the column.
+func (s *Store) UserByPhone(ctx context.Context, phone string) (User, error) {
+	if phone = strings.TrimSpace(phone); phone == "" {
+		return User{}, ErrNotFound
+	}
+	return scanUser(s.db.QueryRowContext(ctx, `SELECT `+userColumns+` FROM users WHERE phone = $1`, phone))
+}
+
+// MarkPhoneVerified records that a code sent to this account's number came back.
+func (s *Store) MarkPhoneVerified(ctx context.Context, id int64) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE users SET phone_verified_at = now(), updated_at = now() WHERE id = $1`, id)
+	return err
 }
 
 // UserByID looks an account up by primary key.
@@ -197,6 +227,74 @@ func (s *Store) CountUsers(ctx context.Context) (int, error) {
 	var n int
 	err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM users`).Scan(&n)
 	return n, err
+}
+
+// ---------------------------------------------------------------- phone codes
+
+// PhoneCode is a one-time code waiting to be typed back.
+type PhoneCode struct {
+	Phone     string
+	CodeHash  string
+	Attempts  int
+	SentAt    time.Time
+	ExpiresAt time.Time
+}
+
+// MaxPhoneCodeAttempts is how many wrong guesses one code tolerates before it
+// is spent. Six digits is a million possibilities, which is plenty against a
+// human and nothing against a script, so the count — not the length — is what
+// keeps the code from being enumerable inside its five minutes.
+const MaxPhoneCodeAttempts = 5
+
+// SavePhoneCode stores the hash of a freshly sent code, replacing whatever was
+// outstanding for that number so a resend cannot leave two codes live at once.
+// Replacing also resets the attempt count, which is why a resend is throttled
+// separately: otherwise it would be a way to buy unlimited guesses.
+func (s *Store) SavePhoneCode(ctx context.Context, phone, codeHash string, expiresAt time.Time) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO phone_codes (phone, code_hash, attempts, sent_at, expires_at)
+		VALUES ($1, $2, 0, now(), $3)
+		ON CONFLICT (phone) DO UPDATE SET
+			code_hash = EXCLUDED.code_hash,
+			attempts = 0,
+			sent_at = now(),
+			expires_at = EXCLUDED.expires_at`,
+		phone, codeHash, expiresAt)
+	return err
+}
+
+// PhoneCode returns the outstanding code for a number, expired or not. The
+// caller decides what an expired one means, so that "there was never a code"
+// and "the code ran out" can be answered with the same sentence.
+func (s *Store) PhoneCode(ctx context.Context, phone string) (PhoneCode, error) {
+	var c PhoneCode
+	err := s.db.QueryRowContext(ctx,
+		`SELECT phone, code_hash, attempts, sent_at, expires_at FROM phone_codes WHERE phone = $1`, phone).
+		Scan(&c.Phone, &c.CodeHash, &c.Attempts, &c.SentAt, &c.ExpiresAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return PhoneCode{}, ErrNotFound
+	}
+	return c, err
+}
+
+// BumpPhoneCodeAttempts counts a wrong guess and reports how many have been
+// made. The count is in the database rather than in memory so restarting the
+// process does not hand a guesser a fresh budget.
+func (s *Store) BumpPhoneCodeAttempts(ctx context.Context, phone string) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`UPDATE phone_codes SET attempts = attempts + 1 WHERE phone = $1 RETURNING attempts`, phone).Scan(&n)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	return n, err
+}
+
+// DeletePhoneCode spends a code. Like consuming an authorization code, this is
+// what makes replaying one useless.
+func (s *Store) DeletePhoneCode(ctx context.Context, phone string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM phone_codes WHERE phone = $1`, phone)
+	return err
 }
 
 // ---------------------------------------------------------------- clients
@@ -754,6 +852,7 @@ func (s *Store) Cleanup(ctx context.Context) error {
 		`DELETE FROM oauth_codes WHERE expires_at < now() - interval '1 day'`,
 		`DELETE FROM oauth_refresh_tokens WHERE expires_at < now() - interval '7 days'`,
 		`DELETE FROM sessions WHERE expires_at < now()`,
+		`DELETE FROM phone_codes WHERE expires_at < now() - interval '1 day'`,
 	}
 	for _, q := range stmts {
 		if _, err := s.db.ExecContext(ctx, q); err != nil {

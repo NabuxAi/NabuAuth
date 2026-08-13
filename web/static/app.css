@@ -78,7 +78,7 @@ a { color: var(--accent); }
 .form.row { grid-auto-flow: column; justify-content: end; gap: .6rem; }
 label { display: grid; gap: .35rem; font-size: .88rem; }
 label em { color: var(--muted); font-style: normal; }
-input {
+input, select {
   padding: .65rem .75rem;
   border: 1px solid var(--line);
   border-radius: 9px;
@@ -86,7 +86,27 @@ input {
   color: var(--text);
   font: inherit;
 }
-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* The country selector and the number are one control split in two, so they
+   have to line up as one. Without this the native select keeps its own height
+   and sits a few pixels off the input beside it. */
+.phone-field {
+  display: grid;
+  grid-template-columns: minmax(7.5rem, auto) 1fr;
+  gap: .5rem;
+}
+.phone-field select {
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+.phone-field input { min-width: 0; }
+.form.resend { margin-top: .6rem; justify-items: start; }
+.auth .form.resend button { width: auto; }
+
+@media (max-width: 26rem) {
+  .phone-field { grid-template-columns: 1fr; }
+}
 
 button, .primary {
   padding: .65rem 1.05rem;

@@ -57,6 +57,11 @@ func (s *Server) handleUserInfo(w http.ResponseWriter, r *http.Request) {
 	}
 	if claims.HasScope("profile") {
 		body["phone"] = user.Phone
+		// Added beside phone rather than in place of anything: the published
+		// SDKs read this response and nothing here may move or change type.
+		// Unlike email_verified this one is really earned — a code went to the
+		// number and came back.
+		body["phone_verified"] = user.PhoneVerified
 	}
 	if claims.HasScope("wallet") {
 		if wallet, err := s.store.WalletFor(r.Context(), user.ID); err == nil {

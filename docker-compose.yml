@@ -15,6 +15,13 @@ services:
       NABUAUTH_SECRET_NABUGEN: ${NABUAUTH_SECRET_NABUGEN}
       NABUAUTH_SECRET_NABUVOICE: ${NABUAUTH_SECRET_NABUVOICE}
       NABUAUTH_SECRET_NABUWRITE: ${NABUAUTH_SECRET_NABUWRITE}
+      # The SMS gateway that carries one-time codes. Both are needed: without
+      # them the phone field is simply not offered, which is the intended
+      # behaviour for a deployment that has no gateway — but a deployment that
+      # meant to have one and forgot a line here would find the option missing
+      # in production while it worked locally.
+      NABUAUTH_SMS_URL: ${NABUAUTH_SMS_URL:-https://sms.nabuxai.com}
+      NABUAUTH_SMS_KEY: ${NABUAUTH_SMS_KEY}
     labels:
       - "coolify.managed=true"
       - "traefik.enable=true"

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/mail"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -77,6 +78,39 @@ func (t *throttle) reset(key string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	delete(t.attempts, key)
+}
+
+// spent reports whether a budget of limit uses has already been used up.
+//
+// Separate from blocked because a spend ceiling is not a lockout: it has its own
+// size and its own window, and the thing it protects is a bill rather than an
+// account.
+func (t *throttle) spent(key string, limit int) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	a := t.attempts[key]
+	if a == nil {
+		return false
+	}
+	if time.Now().After(a.until) {
+		delete(t.attempts, key)
+		return false
+	}
+	return a.count >= limit
+}
+
+// spend records one use against a budget lasting window. The window is set when
+// the budget opens and not extended by later uses, so the budget actually
+// refills instead of a steady trickle holding it open forever.
+func (t *throttle) spend(key string, window time.Duration) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	a := t.attempts[key]
+	if a == nil || time.Now().After(a.until) {
+		a = &attempt{until: time.Now().Add(window)}
+		t.attempts[key] = a
+	}
+	a.count++
 }
 
 func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
@@ -238,21 +272,52 @@ func (s *Server) handleRegisterRedirect(w http.ResponseWriter, r *http.Request) 
 	http.Redirect(w, r, target, http.StatusFound)
 }
 
+// loginView is everything the one form can be showing at once: the email half,
+// the phone half, and which of the two just went wrong.
+type loginView struct {
+	Next  string
+	Email string
+	Error string
+
+	// The phone half. Phone is the E.164 number a code was just sent to, and
+	// Country the ISO code the visitor picked, kept so a refused submission
+	// comes back with the selector where they left it.
+	Phone       string
+	Country     string
+	PhoneError  string
+	PhoneNotice string
+	CodeSent    bool
+}
+
 // renderLogin draws the sign-in page, naming the application that sent the
 // visitor here so the page does not look like an unrelated site asking for a
 // password.
 func (s *Server) renderLogin(w http.ResponseWriter, r *http.Request, status int, next, email, errMsg string) {
+	s.renderLoginView(w, r, status, loginView{Next: next, Email: email, Error: errMsg})
+}
+
+func (s *Server) renderLoginView(w http.ResponseWriter, r *http.Request, status int, v loginView) {
 	s.render(w, status, "login.html", map[string]any{
 		"Title": "Sign in to Nabu",
-		"Next":  next,
-		"Email": email,
-		"Error": errMsg,
-		"App":   s.connectingApp(r, next),
+		"Next":  v.Next,
+		"Email": v.Email,
+		"Error": v.Error,
+		"App":   s.connectingApp(r, v.Next),
 		// What the page tells the visitor about an unknown email has to match
 		// what the submission will actually do — which includes the case where
 		// sign-up is closed but the database has no accounts yet.
 		"AllowRegistration": s.registrationOpen(r),
 		"Providers":         s.cfg.EnabledLoginMethods(),
+		// The phone half exists only where a gateway is configured. A field that
+		// cannot send a code would report one as sent, which is the whole defect
+		// this door is here to not repeat.
+		"Sms":         s.sms != nil,
+		"Countries":   s.cfg.Sms.Countries,
+		"Country":     v.Country,
+		"Phone":       v.Phone,
+		"PhoneError":  v.PhoneError,
+		"PhoneNotice": v.PhoneNotice,
+		"CodeSent":    v.CodeSent,
 	})
 }
 
@@ -426,19 +491,85 @@ func validEmail(addr string) bool {
 	return err == nil
 }
 
-// clientIP prefers the proxy-supplied address, since NabuAuth always runs behind
-// one in production and RemoteAddr would otherwise be the proxy for everyone.
+// clientIP is the address every rate limiter in this server is keyed on, so it
+// has to be an address the caller cannot choose.
+//
+// X-Forwarded-For is a list each hop appends to, and the leftmost entry is
+// whatever the *client* wrote — Traefik appends the real peer to it rather than
+// replacing it. Reading the front of that list therefore let one visitor mint a
+// fresh limiter bucket per request by incrementing a header, which uncaps every
+// budget here, including the per-IP ceiling that is the only thing standing
+// between a script and an unlimited SMS bill.
+//
+// So the list is walked from the right, skipping the hops that are ours, and
+// the first address that is not ours is the one that actually reached us. A
+// client-written prefix is always to the left of that, and is never reached.
 func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if i := strings.IndexByte(xff, ','); i > 0 {
-			return strings.TrimSpace(xff[:i])
-		}
-		return strings.TrimSpace(xff)
-	}
+	peer := r.RemoteAddr
 	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-		return host
+		peer = host
 	}
-	return r.RemoteAddr
+
+	// Only believe the header at all when the machine talking to us is a proxy
+	// of ours. A direct connection from the internet has no forwarded chain
+	// worth reading, whatever it claims.
+	if !trustedProxy(peer) {
+		return peer
+	}
+
+	parts := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
+	for i := len(parts) - 1; i >= 0; i-- {
+		hop := strings.TrimSpace(parts[i])
+		if hop == "" {
+			continue
+		}
+		if trustedProxy(hop) {
+			continue
+		}
+		return hop
+	}
+
+	return peer
+}
+
+// trustedProxies are the networks a reverse proxy of ours runs on. Anything
+// inside them may speak for a client through X-Forwarded-For; nothing outside
+// them may. A deployment fronted by Cloudflare adds its published ranges here
+// (or in front of it), or every visitor is counted as the edge that forwarded
+// them — which is conservative rather than exploitable, and so the safe default.
+var trustedProxies = func() []*net.IPNet {
+	cidrs := []string{
+		"127.0.0.0/8", "::1/128",
+		"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+		"fc00::/7",
+	}
+	if extra := os.Getenv("NABUAUTH_TRUSTED_PROXIES"); extra != "" {
+		for _, c := range strings.Split(extra, ",") {
+			if c = strings.TrimSpace(c); c != "" {
+				cidrs = append(cidrs, c)
+			}
+		}
+	}
+	nets := make([]*net.IPNet, 0, len(cidrs))
+	for _, c := range cidrs {
+		if _, n, err := net.ParseCIDR(c); err == nil {
+			nets = append(nets, n)
+		}
+	}
+	return nets
+}()
+
+func trustedProxy(addr string) bool {
+	ip := net.ParseIP(strings.Trim(addr, "[]"))
+	if ip == nil {
+		return false
+	}
+	for _, n := range trustedProxies {
+		if n.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // minorUnitDigits is how many decimal places a currency's minor unit has. The
