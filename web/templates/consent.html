@@ -1,7 +1,16 @@
 {{define "consent.html"}}{{template "head" .}}
-<main class="card">
-  <h1>{{.Client.Name}} wants to use your Nabu account</h1>
-  <p class="sub">Signed in as <b>{{.User.Email}}</b>. <a href="/oauth/authorize?prompt=login&amp;client_id={{.Client.ClientID}}">Not you?</a></p>
+<main class="card auth">
+  {{if .NewAccount}}
+  <p class="notice" role="status">Your Nabu account is ready. It signs you in to every app in the ecosystem — this is the only time {{.Client.Name}} asks.</p>
+  {{end}}
+
+  <div class="app-head">
+    <span class="app-mark">{{initials .Client.Name}}</span>
+    <div>
+      <h1>Connect {{.Client.Name}}</h1>
+      <p class="sub">Signed in as <b>{{.User.Email}}</b>. <a href="/oauth/authorize?prompt=login&amp;client_id={{.Client.ClientID}}">Not you?</a></p>
+    </div>
+  </div>
 
   <ul class="scopes">
     {{range .Scopes}}<li><span class="tick">✓</span> {{.Label}}</li>{{end}}
@@ -18,9 +27,9 @@
     <input type="hidden" name="code_challenge" value="{{.Request.CodeChallenge}}">
     <input type="hidden" name="code_challenge_method" value="{{.Request.ChallengeMethod}}">
     <button type="submit" name="approve" value="no" class="ghost">Cancel</button>
-    <button type="submit" name="approve" value="yes" class="primary">Allow</button>
+    <button type="submit" name="approve" value="yes" class="primary">Allow and continue</button>
   </form>
 
-  <p class="muted">You can revoke this at any time from your <a href="/dashboard">Nabu account</a>.</p>
+  <p class="muted hint">Approve once and every later sign-in goes straight to {{.Client.Name}}. You can disconnect it at any time from your <a href="/dashboard">Nabu account</a>.</p>
 </main>
 {{template "foot" .}}{{end}}

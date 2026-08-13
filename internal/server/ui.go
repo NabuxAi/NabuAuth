@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/mail"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -31,6 +32,16 @@ type attempt struct {
 const (
 	maxAttempts = 8
 	lockFor     = 10 * time.Minute
+
+	// minPasswordLen is checked only when an account is being created. Signing
+	// in compares against the stored hash, so an account made before this rule
+	// still works with the password it has.
+	minPasswordLen = 10
+
+	// welcomeCookie marks a session that began by creating the account, so the
+	// next screen can say the account is new instead of asking somebody who has
+	// never seen NabuAuth to approve something with no explanation.
+	welcomeCookie = "nabuauth_welcome"
 )
 
 func newThrottle() *throttle { return &throttle{attempts: map[string]*attempt{}} }
@@ -85,22 +96,24 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/login", http.StatusFound)
 }
 
+// handleLoginForm renders the one door into the ecosystem: a single step, email
+// and password together. There is no separate sign-up form to send people to,
+// because a visitor arriving from an app does not know yet whether they have a
+// Nabu account — the ecosystem may have made one for them through another app.
+// Asking them to choose the right form first is asking a question they cannot
+// answer.
 func (s *Server) handleLoginForm(w http.ResponseWriter, r *http.Request) {
 	next := safeNext(r.URL.Query().Get("next"))
 	if _, ok := s.currentUser(r); ok && next != "" {
 		http.Redirect(w, r, next, http.StatusFound)
 		return
 	}
-	s.render(w, http.StatusOK, "login.html", map[string]any{
-		"Title": "Sign in to Nabu",
-		"Next":  next,
-		// The template offers a "create one" link when sign-up is open. It was
-		// never passed, so an open deployment still hid the only way in for
-		// someone who had no account yet.
-		"AllowRegistration": s.registrationOpen(r),
-	})
+	s.renderLogin(w, r, http.StatusOK, next, "", "")
 }
 
+// handleLoginSubmit signs the visitor in, or creates the account and signs them
+// in, from the same submission. Which of the two happened is never a question
+// the form asked: the email either has an account behind it or it does not.
 func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
@@ -111,46 +124,88 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	next := safeNext(r.PostFormValue("next"))
 	key := email + "|" + clientIP(r)
 
-	fail := func(msg string) {
-		s.render(w, http.StatusUnauthorized, "login.html", map[string]any{
-			"Title":             "Sign in to Nabu",
-			"Next":              next,
-			"Email":             email,
-			"Error":             msg,
-			"AllowRegistration": s.registrationOpen(r),
-		})
+	fail := func(status int, msg string) {
+		s.renderLogin(w, r, status, next, email, msg)
 	}
 
 	if s.throttle.blocked(key) {
-		fail("Too many failed attempts. Try again in a few minutes.")
+		fail(http.StatusTooManyRequests, "Too many failed attempts. Try again in a few minutes.")
 		return
 	}
+	if !validEmail(email) {
+		fail(http.StatusBadRequest, "That email address does not look right.")
+		return
+	}
+
 	user, err := s.store.UserByEmail(r.Context(), email)
-	if err != nil {
-		if !isNotFound(err) {
-			s.log.Error("login lookup", "error", err)
+	created := false
+	switch {
+	case err == nil:
+		if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) != nil {
+			s.throttle.fail(key)
+			fail(http.StatusUnauthorized, "Wrong email or password.")
+			return
 		}
-		// Compare against a dummy hash anyway, so a missing account and a wrong
-		// password take the same time and cannot be told apart.
+		if !user.IsActive {
+			fail(http.StatusForbidden, "This account is disabled.")
+			return
+		}
+	case !isNotFound(err):
+		s.log.Error("login lookup", "error", err)
+		fail(http.StatusInternalServerError, "Could not sign you in. Try again.")
+		return
+
+	// No account with that email. Where sign-up is closed the answer has to be
+	// the same sentence a wrong password gets, or this form becomes a way to ask
+	// which addresses hold accounts.
+	case !s.registrationOpen(r):
+		// Spend the same time a real comparison would, so the two answers cannot
+		// be told apart by how long they take either.
 		_ = bcrypt.CompareHashAndPassword([]byte("$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvalidin"), []byte(password))
 		s.throttle.fail(key)
-		fail("Wrong email or password.")
+		fail(http.StatusUnauthorized, "Wrong email or password.")
 		return
+
+	default:
+		if len(password) < minPasswordLen {
+			// The account does not exist, so this is a sign-up, and saying so is
+			// what stops a mistyped address from reading as a broken password.
+			fail(http.StatusBadRequest, fmt.Sprintf("No Nabu account uses %s yet. To create one now, choose a password of at least %d characters.", email, minPasswordLen))
+			return
+		}
+		user, err = s.createAccount(r, email, password)
+		if errors.Is(err, store.ErrDuplicate) {
+			// Two submissions raced. The account exists now, so the second one is
+			// an ordinary sign-in that has to prove the password.
+			fail(http.StatusUnauthorized, "Wrong email or password.")
+			return
+		}
+		if err != nil {
+			s.log.Error("create user", "error", err)
+			fail(http.StatusInternalServerError, "Could not create the account. Try again.")
+			return
+		}
+		created = true
 	}
-	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) != nil {
-		s.throttle.fail(key)
-		fail("Wrong email or password.")
-		return
-	}
-	if !user.IsActive {
-		fail("This account is disabled.")
-		return
-	}
+
 	s.throttle.reset(key)
 	if err := s.startSession(w, r, user.ID); err != nil {
 		s.log.Error("start session", "error", err)
-		fail("Could not start a session. Try again.")
+		fail(http.StatusInternalServerError, "Could not start a session. Try again.")
 		return
+	}
+	if created {
+		// Read and cleared by whichever screen comes next, so a brand-new account
+		// is told it is new exactly once.
+		http.SetCookie(w, &http.Cookie{
+			Name:     welcomeCookie,
+			Value:    "1",
+			Path:     "/",
+			MaxAge:   300,
+			HttpOnly: true,
+			Secure:   s.cfg.Server.UseSecureCookies(),
+			SameSite: http.SameSiteLaxMode,
+		})
 	}
 	if next == "" {
 		next = "/dashboard"
@@ -158,93 +213,110 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, next, http.StatusFound)
 }
 
-func (s *Server) handleRegisterForm(w http.ResponseWriter, r *http.Request) {
-	if !s.registrationOpen(r) {
-		s.render(w, http.StatusForbidden, "error.html", map[string]any{
-			"Title":   "Sign-up is closed",
-			"Message": "Nabu accounts are created by an administrator. Ask your team to invite you.",
-		})
-		return
-	}
-	s.render(w, http.StatusOK, "register.html", map[string]any{
-		"Title": "Create a Nabu account",
-		"Next":  safeNext(r.URL.Query().Get("next")),
-	})
-}
-
-func (s *Server) handleRegisterSubmit(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad form", http.StatusBadRequest)
-		return
-	}
-	if !s.registrationOpen(r) {
-		s.render(w, http.StatusForbidden, "error.html", map[string]any{
-			"Title":   "Sign-up is closed",
-			"Message": "Nabu accounts are created by an administrator.",
-		})
-		return
-	}
-	name := strings.TrimSpace(r.PostFormValue("name"))
-	email := strings.ToLower(strings.TrimSpace(r.PostFormValue("email")))
-	phone := strings.TrimSpace(r.PostFormValue("phone"))
-	password := r.PostFormValue("password")
-	next := safeNext(r.PostFormValue("next"))
-
-	fail := func(msg string) {
-		s.render(w, http.StatusBadRequest, "register.html", map[string]any{
-			"Title": "Create a Nabu account",
-			"Name":  name,
-			"Email": email,
-			"Phone": phone,
-			"Next":  next,
-			"Error": msg,
-		})
-	}
-	switch {
-	case name == "":
-		fail("Your name is required.")
-		return
-	case !validEmail(email):
-		fail("That email address does not look right.")
-		return
-	case len(password) < 10:
-		fail("Use a password of at least 10 characters.")
-		return
-	}
-
+// createAccount makes the account behind an email nobody has claimed yet.
+func (s *Server) createAccount(r *http.Request, email, password string) (store.User, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		s.log.Error("hash password", "error", err)
-		fail("Could not create the account. Try again.")
-		return
+		return store.User{}, err
 	}
 	// The very first account is the administrator, so a fresh deployment has an
 	// owner without a seeding step.
 	count, err := s.store.CountUsers(r.Context())
 	if err != nil {
-		s.log.Error("count users", "error", err)
-		fail("Could not create the account. Try again.")
-		return
+		return store.User{}, err
 	}
-	user, err := s.store.CreateUser(r.Context(), name, email, phone, string(hash), count == 0)
-	if errors.Is(err, store.ErrDuplicate) {
-		fail("That email or phone number is already registered.")
-		return
+	return s.store.CreateUser(r.Context(), nameFromEmail(email), email, "", string(hash), count == 0)
+}
+
+// handleRegisterRedirect keeps every /register link in the ecosystem working.
+// Signing in and signing up are the same door now, so this one leads to it.
+func (s *Server) handleRegisterRedirect(w http.ResponseWriter, r *http.Request) {
+	target := "/login"
+	if next := safeNext(r.URL.Query().Get("next")); next != "" {
+		target += "?next=" + url.QueryEscape(next)
 	}
-	if err != nil {
-		s.log.Error("create user", "error", err)
-		fail("Could not create the account. Try again.")
-		return
-	}
-	if err := s.startSession(w, r, user.ID); err != nil {
-		s.log.Error("start session", "error", err)
-		http.Redirect(w, r, "/login", http.StatusFound)
-		return
-	}
+	http.Redirect(w, r, target, http.StatusFound)
+}
+
+// renderLogin draws the sign-in page, naming the application that sent the
+// visitor here so the page does not look like an unrelated site asking for a
+// password.
+func (s *Server) renderLogin(w http.ResponseWriter, r *http.Request, status int, next, email, errMsg string) {
+	s.render(w, status, "login.html", map[string]any{
+		"Title": "Sign in to Nabu",
+		"Next":  next,
+		"Email": email,
+		"Error": errMsg,
+		"App":   s.connectingApp(r, next),
+		// What the page tells the visitor about an unknown email has to match
+		// what the submission will actually do — which includes the case where
+		// sign-up is closed but the database has no accounts yet.
+		"AllowRegistration": s.registrationOpen(r),
+		"Providers":         s.cfg.EnabledLoginMethods(),
+	})
+}
+
+// connectingApp is the application whose authorize request sent the visitor to
+// this form, or nil when they came here on their own.
+func (s *Server) connectingApp(r *http.Request, next string) map[string]any {
 	if next == "" {
-		next = "/dashboard"
+		return nil
 	}
-	http.Redirect(w, r, next, http.StatusFound)
+	u, err := url.Parse(next)
+	if err != nil || !strings.HasPrefix(u.Path, "/oauth/authorize") {
+		return nil
+	}
+	clientID := u.Query().Get("client_id")
+	if clientID == "" {
+		return nil
+	}
+	client, err := s.store.ClientByID(r.Context(), clientID)
+	if err != nil {
+		return nil
+	}
+	return map[string]any{
+		"Name":        client.Name,
+		"Description": client.Description,
+		"URL":         client.AppURL,
+	}
+}
+
+// nameFromEmail is the display name for an account created from nothing but an
+// email address. The form asks for two fields and no more, so this stands in
+// until the person changes it.
+func nameFromEmail(email string) string {
+	local := email
+	if i := strings.IndexByte(local, '@'); i > 0 {
+		local = local[:i]
+	}
+	local = strings.NewReplacer(".", " ", "_", " ", "-", " ").Replace(local)
+	words := strings.Fields(local)
+	for i, word := range words {
+		words[i] = strings.ToUpper(word[:1]) + word[1:]
+	}
+	if len(words) == 0 {
+		return email
+	}
+	return strings.Join(words, " ")
+}
+
+// takeWelcome reports whether this session was created by signing up a moment
+// ago, clearing the marker so the message is shown once.
+func (s *Server) takeWelcome(w http.ResponseWriter, r *http.Request) bool {
+	c, err := r.Cookie(welcomeCookie)
+	if err != nil || c.Value == "" {
+		return false
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     welcomeCookie,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   s.cfg.Server.UseSecureCookies(),
+		SameSite: http.SameSiteLaxMode,
+	})
+	return true
 }
 
 // registrationOpen reports whether the sign-up form is available. It is always
@@ -305,6 +377,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 	s.render(w, http.StatusOK, "dashboard.html", map[string]any{
 		"Title":        "Your Nabu account",
+		"NewAccount":   s.takeWelcome(w, r),
 		"User":         user,
 		"Apps":         apps,
 		"Wallet":       wallet,

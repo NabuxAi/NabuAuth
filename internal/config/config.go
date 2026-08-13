@@ -17,6 +17,41 @@ type Config struct {
 	Server Server            `yaml:"server"`
 	Scopes map[string]string `yaml:"scopes"`
 	Apps   []App             `yaml:"apps"`
+
+	// LoginMethods are the outside identity providers offered beside the email
+	// form. Each is an ordinary OIDC provider, so one implementation serves
+	// Google, Microsoft, an enterprise IdP or another Nabu deployment.
+	LoginMethods []Provider `yaml:"login_methods"`
+}
+
+// Provider is one external sign-in method.
+type Provider struct {
+	ID           string   `yaml:"id"`
+	Name         string   `yaml:"name"`
+	AuthorizeURL string   `yaml:"authorize_url"`
+	TokenURL     string   `yaml:"token_url"`
+	UserinfoURL  string   `yaml:"userinfo_url"`
+	ClientID     string   `yaml:"client_id"`
+	Scopes       []string `yaml:"scopes"`
+
+	// SecretEnv names the env var holding this provider's client secret, on the
+	// same terms as an app's: the value never appears in the file.
+	SecretEnv string `yaml:"secret_env"`
+}
+
+// Secret returns the provider's client secret from its env var.
+func (p Provider) Secret() string {
+	if p.SecretEnv == "" {
+		return ""
+	}
+	return os.Getenv(p.SecretEnv)
+}
+
+// Configured reports whether this provider has everything it needs to be
+// offered. A button that leads to a broken exchange is worse than no button.
+func (p Provider) Configured() bool {
+	return p.ID != "" && p.ClientID != "" && p.Secret() != "" &&
+		p.AuthorizeURL != "" && p.TokenURL != "" && p.UserinfoURL != ""
 }
 
 // Server holds the listener and token lifetimes.
@@ -108,6 +143,35 @@ func (c *Config) applyDefaults() {
 			c.Apps[i].Scopes = []string{"openid", "profile", "email"}
 		}
 	}
+	for i := range c.LoginMethods {
+		if c.LoginMethods[i].Name == "" {
+			c.LoginMethods[i].Name = c.LoginMethods[i].ID
+		}
+		if len(c.LoginMethods[i].Scopes) == 0 {
+			c.LoginMethods[i].Scopes = []string{"openid", "email", "profile"}
+		}
+	}
+}
+
+// EnabledLoginMethods are the providers a deployment has actually configured.
+func (c *Config) EnabledLoginMethods() []Provider {
+	out := make([]Provider, 0, len(c.LoginMethods))
+	for _, p := range c.LoginMethods {
+		if p.Configured() {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// LoginMethod finds a configured provider by id.
+func (c *Config) LoginMethod(id string) (Provider, bool) {
+	for _, p := range c.LoginMethods {
+		if p.ID == id && p.Configured() {
+			return p, true
+		}
+	}
+	return Provider{}, false
 }
 
 func (c *Config) validate() error {
@@ -136,6 +200,24 @@ func (c *Config) validate() error {
 			}
 		}
 	}
+	seenProvider := map[string]bool{}
+	for _, p := range c.LoginMethods {
+		if p.ID == "" {
+			return fmt.Errorf("login_method %q: id is required", p.Name)
+		}
+		if seenProvider[p.ID] {
+			return fmt.Errorf("login_method %q: duplicate id", p.ID)
+		}
+		seenProvider[p.ID] = true
+		// A provider reached over plaintext hands the code, the secret and the
+		// user's identity to whoever is on the wire.
+		for _, u := range []string{p.AuthorizeURL, p.TokenURL, p.UserinfoURL} {
+			if u != "" && !strings.HasPrefix(u, "https://") && !strings.HasPrefix(u, "http://127.0.0.1") && !strings.HasPrefix(u, "http://localhost") {
+				return fmt.Errorf("login_method %q: %q is not https", p.ID, u)
+			}
+		}
+	}
+
 	for _, d := range []struct {
 		name  string
 		value string

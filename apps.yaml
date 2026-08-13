@@ -11,11 +11,15 @@ server:
   refresh_token_ttl: 720h   # 30 days
   session_ttl: 720h
   code_ttl: 10m
-  # Off means an administrator creates accounts. The sign-up form stays reachable
-  # while the database has no users at all, so a fresh deployment can be claimed.
+  # Sign-in and sign-up are one form: an email no account uses is created from
+  # the same submission. Off means that half is refused and an administrator
+  # creates accounts instead — in which case an unknown email is answered with
+  # the same sentence a wrong password gets, so the form does not become a way
+  # to ask which addresses hold accounts.
   #
-  # Read from the environment so a deployment can open or close sign-up without
-  # a code change. Unset expands to empty, which is off — the safe default.
+  # Set NABUAUTH_ALLOW_REGISTRATION=true on a deployment that lets people sign
+  # themselves up. Unset reads as off, and sign-up stays open regardless while
+  # the database has no users at all, so a fresh deployment can be claimed.
   allow_registration: ${NABUAUTH_ALLOW_REGISTRATION}
 
 # Every scope an app may request, with the sentence the user reads on the
@@ -107,3 +111,26 @@ apps:
 #                  run air-gapped, and single sign-on needs outbound internet.
 #
 # Add an entry here once one of them implements /auth/nabu/callback.
+
+# External sign-in methods, offered beside the email form. Each is an ordinary
+# OIDC authorization-code provider, so one implementation covers Google,
+# Microsoft, an enterprise IdP or another Nabu deployment.
+#
+# A method appears on the form only once its client id, its three endpoints and
+# the secret named by secret_env are all present — a button leading to an
+# exchange this deployment cannot complete is worse than no button. The account
+# is matched on the email the provider asserts, and only when the provider says
+# it verified that email.
+#
+# The redirect URI to register with the provider is:
+#     <issuer>/login/<id>/callback
+#
+# login_methods:
+#   - id: google
+#     name: Google
+#     authorize_url: https://accounts.google.com/o/oauth2/v2/auth
+#     token_url: https://oauth2.googleapis.com/token
+#     userinfo_url: https://openidconnect.googleapis.com/v1/userinfo
+#     client_id: ${GOOGLE_CLIENT_ID}
+#     scopes: [openid, email, profile]
+#     secret_env: NABUAUTH_PROVIDER_SECRET_GOOGLE

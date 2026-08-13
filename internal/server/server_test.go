@@ -24,7 +24,7 @@ import (
 // OAuth flow is mostly about what the database refuses to do twice — replayed
 // codes, rotated refresh tokens, idempotent debits — so a fake store would test
 // the wrong thing.
-func newTestServer(t *testing.T) (*httptest.Server, *store.Store) {
+func newTestServer(t *testing.T, tweaks ...func(*config.Config)) (*httptest.Server, *store.Store) {
 	t.Helper()
 	dsn := os.Getenv("NABUAUTH_TEST_DATABASE_URL")
 	if dsn == "" {
@@ -73,6 +73,10 @@ func newTestServer(t *testing.T) (*httptest.Server, *store.Store) {
 				Public:       true,
 			},
 		},
+	}
+
+	for _, tweak := range tweaks {
+		tweak(cfg)
 	}
 
 	kid, pem, err := tokens.GenerateKey()
@@ -157,7 +161,7 @@ func TestAuthorizationCodeFlowWithPKCE(t *testing.T) {
 	}
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "wants to use your Nabu account") {
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "Connect Test App") {
 		t.Fatalf("expected the consent screen, got %d: %s", resp.StatusCode, truncate(string(body)))
 	}
 	csrf := extractInput(string(body), "csrf")

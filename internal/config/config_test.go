@@ -101,6 +101,27 @@ apps:
 			body: "server:\n  access_token_ttl: soon\n",
 			want: "access_token_ttl",
 		},
+		{
+			// A code, a client secret and somebody's identity travel over these.
+			name: "plaintext provider endpoint",
+			body: `
+login_methods:
+  - id: idp
+    authorize_url: http://idp.example.com/authorize
+    token_url: https://idp.example.com/token
+    userinfo_url: https://idp.example.com/userinfo
+`,
+			want: "not https",
+		},
+		{
+			name: "duplicate provider id",
+			body: `
+login_methods:
+  - id: idp
+  - id: idp
+`,
+			want: "duplicate id",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

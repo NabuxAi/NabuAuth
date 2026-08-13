@@ -223,14 +223,18 @@ func (s *Server) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.render(w, http.StatusOK, "consent.html", map[string]any{
-		"Title":     "Authorize " + req.Client.Name,
-		"User":      user,
-		"Client":    req.Client,
-		"Scopes":    s.scopeLabels(req.Scopes),
-		"CSRF":      s.csrfToken(r),
-		"RawScope":  store.JoinList(req.Scopes),
-		"Request":   req,
-		"CancelURL": req.RedirectURI,
+		"Title": "Authorize " + req.Client.Name,
+		// Somebody whose account was made seconds ago has never seen this server
+		// before; without a word saying so, the approval screen reads as a
+		// stranger asking for permission to something they did not sign up for.
+		"NewAccount": s.takeWelcome(w, r),
+		"User":       user,
+		"Client":     req.Client,
+		"Scopes":     s.scopeLabels(req.Scopes),
+		"CSRF":       s.csrfToken(r),
+		"RawScope":   store.JoinList(req.Scopes),
+		"Request":    req,
+		"CancelURL":  req.RedirectURI,
 	})
 }
 

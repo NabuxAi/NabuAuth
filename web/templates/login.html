@@ -1,22 +1,47 @@
 {{define "login.html"}}{{template "head" .}}
-<main class="card">
+<main class="card auth">
+  {{with .App}}
+  <div class="app-head">
+    <span class="app-mark">{{initials .Name}}</span>
+    <div>
+      <h1>Continue to {{.Name}}</h1>
+      {{if .Description}}<p class="sub">{{.Description}}</p>{{end}}
+    </div>
+  </div>
+  <p class="sub">Sign in with your Nabu account. One account works across every app in the ecosystem.</p>
+  {{else}}
   <h1>Sign in</h1>
   <p class="sub">One Nabu account for every app in the ecosystem.</p>
+  {{end}}
+
   {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
+
   <form method="post" action="/login" class="form">
     <input type="hidden" name="next" value="{{.Next}}">
     <label>
       <span>Email</span>
-      <input type="email" name="email" value="{{.Email}}" autocomplete="username" required autofocus>
+      <input type="email" name="email" value="{{.Email}}" autocomplete="username" inputmode="email" required autofocus>
     </label>
     <label>
       <span>Password</span>
       <input type="password" name="password" autocomplete="current-password" required>
     </label>
-    <button type="submit" class="primary">Sign in</button>
+    <button type="submit" class="primary">Continue</button>
   </form>
+
   {{if .AllowRegistration}}
-  <p class="muted">No account yet? <a href="/register{{if .Next}}?next={{.Next}}{{end}}">Create one</a>.</p>
+  <p class="muted hint">First time here? Entering an email no Nabu account uses creates one, with the password you type. There is nothing else to fill in.</p>
+  {{else}}
+  <p class="muted hint">Nabu accounts are created by an administrator. Ask your team to invite you.</p>
+  {{end}}
+
+  {{if .Providers}}
+  <div class="divider"><span>or</span></div>
+  <div class="providers">
+    {{range .Providers}}
+    <a class="provider" href="/login/{{.ID}}{{if $.Next}}?next={{$.Next}}{{end}}">Continue with {{.Name}}</a>
+    {{end}}
+  </div>
   {{end}}
 </main>
 {{template "foot" .}}{{end}}

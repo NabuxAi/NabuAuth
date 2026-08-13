@@ -36,7 +36,13 @@ to a single static binary and ships as a distroless image.
 - **Consent, remembered per app**, revocable from the account dashboard.
 - **Prepaid wallet** with a signed ledger, idempotent debits and overdraft
   protection.
-- **Account UI**: sign in, sign up, app launcher, wallet history.
+- **One sign-in form** — email and password in a single step. An email no
+  account uses is created from the same submission where the deployment allows
+  it; there is no separate sign-up form to pick first.
+- **External sign-in methods** — any OIDC provider (Google, Microsoft, an
+  enterprise IdP) configured in `login_methods`, matched to an account by the
+  verified email it asserts.
+- **Account UI**: sign in, app launcher, wallet history.
 
 ## Endpoints
 
@@ -45,6 +51,9 @@ to a single static binary and ships as a distroless image.
 | `GET /.well-known/openid-configuration` | Discovery document |
 | `GET /oauth/jwks.json` | Public signing keys |
 | `GET /oauth/authorize` | Login and consent screen |
+| `GET /login` | The one sign-in form: signs in, or creates the account |
+| `GET /login/{provider}` | Start an external sign-in method |
+| `GET /login/{provider}/callback` | Finish one |
 | `POST /oauth/token` | `authorization_code`, `refresh_token`, `client_credentials` |
 | `POST /oauth/introspect` | RFC 7662 token introspection |
 | `POST /oauth/revoke` | RFC 7009 revocation |
@@ -99,6 +108,8 @@ Environment:
 | `NABUAUTH_ISSUER` | Public base URL; every issued token names it |
 | `NABUAUTH_CONFIG` | Config path, default `apps.yaml` |
 | `NABUAUTH_SECRET_*` | One client secret per app, named by its `secret_env` |
+| `NABUAUTH_ALLOW_REGISTRATION` | `true` lets an unknown email create its own account from the sign-in form |
+| `NABUAUTH_PROVIDER_SECRET_*` | One client secret per external sign-in method, named by its `secret_env` |
 
 The RSA signing key is generated on first boot and stored in the database, so a
 fresh deployment issues valid tokens with no key ceremony and every replica signs
@@ -145,12 +156,28 @@ readable form. Disabling an account there stops it signing in and ends every
 session it has open.
 
 The first account on a fresh deployment has nobody to create it, so there are
-two ways to bootstrap: claim it through the sign-up form, which stays open only
-while the database has no users at all, or create it from a shell:
+two ways to bootstrap: claim it by signing in with the email and password you
+want, which creates the account only while the database has no users at all, or
+create it from a shell:
 
 ```bash
 docker compose exec app /app/nabuauth -create-user you@example.com -name "You" -admin
 ```
+
+## Adding a sign-in method
+
+Every external method is an ordinary OIDC authorization-code provider, so one
+implementation covers all of them:
+
+1. Register `<issuer>/login/<id>/callback` as a redirect URI with the provider.
+2. Add an entry to `login_methods` in `apps.yaml` with its three endpoints and
+   its client id.
+3. Set the secret in the env var named by `secret_env` and redeploy.
+
+The method appears on the sign-in form only once all of that is present. An
+account is matched on the email the provider asserts and **only** when the
+provider says it verified that email — without that check, a provider that lets
+somebody type an address is a way into whichever Nabu account already uses it.
 
 ## Recovering an account
 

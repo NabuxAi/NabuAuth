@@ -71,3 +71,59 @@ needs a redirect URI and a client secret set as `NABUAUTH_SECRET_<APP>` on the
 deployment. The secret is a value only whoever deploys can create, so the
 structure is here and the entry is not — adding one with an invented secret
 would produce an app that appears in the launcher and fails at sign-in.
+
+### 2026-08-13 — one door, and a place for other keys
+
+**`/login` and `/register` are one form.** Email and password, one step. The
+email either has an account behind it or it does not; the second case creates
+the account from the same submission where `allow_registration` permits it, and
+`/register` is now a redirect so nothing that linked to it breaks.
+
+The reason is not tidiness. Every app in the ecosystem sends people here, and
+somebody arriving from NabuCRM does not know whether NabuGate already made them
+a Nabu account. "Sign in" or "Sign up" is a question they cannot answer, and
+whichever they pick, half of them are on the wrong page.
+
+Three things had to stay true through the merge:
+
+- **A wrong password is never a sign-up.** The account exists, so the password
+  is checked, and a second account is not created beside it.
+- **A closed deployment does not say which emails have accounts.** With
+  `allow_registration` off, an unknown email is refused with the same sentence a
+  wrong password gets, and takes the same time, because the difference between
+  the two answers is the answer to "does this address have an account here?".
+- **A mistyped address does not silently become a new account with no
+  explanation.** Below the password minimum it says so as a sign-up, naming the
+  address: "No Nabu account uses …@… yet."
+
+The form also names the app that sent the visitor, read out of the `client_id`
+in `next`, and a session that began by creating the account carries a one-shot
+marker so the consent screen can say the account is new. An approval prompt is
+the second thing a brand-new user ever sees; without a word of context it reads
+as a stranger asking for permission to something they did not sign up for.
+
+**External sign-in methods.** `login_methods` in `apps.yaml` takes any OIDC
+provider — Google, Microsoft, an enterprise IdP, another Nabu deployment — as
+three endpoints, a client id and a secret env var. One implementation covers all
+of them; adding one is configuration, not code.
+
+Two rules make it safe to believe a provider:
+
+- **The email must be one the provider says it verified.** A provider that lets
+  a user type an address is otherwise a way into whichever Nabu account already
+  uses it.
+- **A method with a missing secret or endpoint is not offered at all.** A button
+  that leads to an exchange this deployment cannot complete is worse than no
+  button.
+
+`allow_registration` now reads `NABUAUTH_ALLOW_REGISTRATION` from the
+environment rather than being pinned in the file, because the one-door form
+turns it into an operational decision rather than a build-time one.
+
+## Needs you
+
+**Set `NABUAUTH_ALLOW_REGISTRATION=true` on the deployment** if people are meant
+to be able to sign themselves up. Unset still reads as closed, which is the
+behaviour that shipped before — the sign-in form then refuses unknown emails
+with the same wording as a wrong password, and accounts come from `/admin/users`
+or the CLI.

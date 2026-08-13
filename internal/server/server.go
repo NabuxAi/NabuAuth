@@ -95,8 +95,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /", s.handleHome)
 	mux.HandleFunc("GET /login", s.handleLoginForm)
 	mux.HandleFunc("POST /login", s.handleLoginSubmit)
-	mux.HandleFunc("GET /register", s.handleRegisterForm)
-	mux.HandleFunc("POST /register", s.handleRegisterSubmit)
+	// Sign-in and sign-up are one form. These keep older links and bookmarks
+	// working rather than 404ing somebody mid-sign-in.
+	mux.HandleFunc("GET /register", s.handleRegisterRedirect)
+	mux.HandleFunc("POST /register", s.handleLoginSubmit)
+	// External sign-in methods, one route pair for every provider a deployment
+	// configures.
+	mux.HandleFunc("GET /login/{provider}", s.handleProviderStart)
+	mux.HandleFunc("GET /login/{provider}/callback", s.handleProviderCallback)
+
 	mux.HandleFunc("POST /logout", s.handleLogoutSubmit)
 	mux.HandleFunc("GET /dashboard", s.handleDashboard)
 	mux.HandleFunc("POST /dashboard/revoke", s.handleRevokeApp)
