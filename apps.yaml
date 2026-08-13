@@ -136,6 +136,19 @@ apps:
     scopes: [openid, profile, email, offline]
     secret_env: NABUAUTH_SECRET_REELMIND
 
+  - id: nabuchat
+    name: NabuChat
+    description: AI chat agents trained on your own documents
+    icon: chat-bubble-oval-left-ellipsis
+    url: https://chat.nabuxai.com
+    badge: Active
+    redirect_uris:
+      # NextAuth builds this from the provider id, so the path is fixed by the
+      # framework rather than chosen.
+      - https://chat.nabuxai.com/api/auth/callback/nabuauth
+    scopes: [openid, profile, email, offline]
+    secret_env: NABUAUTH_SECRET_NABUCHAT
+
 # Not yet registered, because they have no sign-in callback to register:
 #
 #   nabusu       — no account system at all; it is a local companion talking to
