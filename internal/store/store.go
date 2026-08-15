@@ -100,6 +100,7 @@ type User struct {
 	Name         string
 	Email        string
 	Phone        string
+	Username     string
 	PasswordHash string
 	AvatarURL    string
 	IsActive     bool
@@ -117,15 +118,15 @@ type User struct {
 
 type scanner interface{ Scan(...any) error }
 
-const userColumns = `id, name, COALESCE(email, ''), COALESCE(phone, ''), password_hash, COALESCE(avatar_url, ''), is_active, is_admin, email_verified_at IS NOT NULL, phone_verified_at IS NOT NULL, created_at`
+const userColumns = `id, name, COALESCE(email, ''), COALESCE(phone, ''), COALESCE(username, ''), password_hash, COALESCE(avatar_url, ''), is_active, is_admin, email_verified_at IS NOT NULL, phone_verified_at IS NOT NULL, created_at`
 
 // userColumnsQualified is the same list with a table alias, for queries that
 // join sessions to users.
-const userColumnsQualified = `u.id, u.name, COALESCE(u.email, ''), COALESCE(u.phone, ''), u.password_hash, COALESCE(u.avatar_url, ''), u.is_active, u.is_admin, u.email_verified_at IS NOT NULL, u.phone_verified_at IS NOT NULL, u.created_at`
+const userColumnsQualified = `u.id, u.name, COALESCE(u.email, ''), COALESCE(u.phone, ''), COALESCE(u.username, ''), u.password_hash, COALESCE(u.avatar_url, ''), u.is_active, u.is_admin, u.email_verified_at IS NOT NULL, u.phone_verified_at IS NOT NULL, u.created_at`
 
 func scanUser(row scanner) (User, error) {
 	var u User
-	if err := row.Scan(&u.ID, &u.Name, &u.Email, &u.Phone, &u.PasswordHash, &u.AvatarURL, &u.IsActive, &u.IsAdmin, &u.EmailVerified, &u.PhoneVerified, &u.CreatedAt); err != nil {
+	if err := row.Scan(&u.ID, &u.Name, &u.Email, &u.Phone, &u.Username, &u.PasswordHash, &u.AvatarURL, &u.IsActive, &u.IsAdmin, &u.EmailVerified, &u.PhoneVerified, &u.CreatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return User{}, ErrNotFound
 		}
@@ -187,6 +188,31 @@ func (s *Store) UserByPhone(ctx context.Context, phone string) (User, error) {
 		return User{}, ErrNotFound
 	}
 	return scanUser(s.db.QueryRowContext(ctx, `SELECT `+userColumns+` FROM users WHERE phone = $1`, phone))
+}
+
+// UserByUsername looks an account up by its handle, without regard to case —
+// the unique index is on lower(username), so this has to match it or two rows
+// could answer to the same typed name.
+func (s *Store) UserByUsername(ctx context.Context, username string) (User, error) {
+	username = strings.ToLower(strings.TrimSpace(username))
+	if username == "" {
+		return User{}, ErrNotFound
+	}
+	return scanUser(s.db.QueryRowContext(ctx, `SELECT `+userColumns+` FROM users WHERE lower(username) = $1`, username))
+}
+
+// SetUsername claims a handle for an account, or clears it when given "".
+func (s *Store) SetUsername(ctx context.Context, id int64, username string) error {
+	username = strings.ToLower(strings.TrimSpace(username))
+	var arg any
+	if username != "" {
+		arg = username
+	}
+	_, err := s.db.ExecContext(ctx, `UPDATE users SET username = $2, updated_at = now() WHERE id = $1`, id, arg)
+	if isUnique(err) {
+		return ErrDuplicate
+	}
+	return err
 }
 
 // MarkPhoneVerified records that a code sent to this account's number came back.

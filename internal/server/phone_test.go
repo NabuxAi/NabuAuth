@@ -359,23 +359,31 @@ func TestThePhoneOptionIsAbsentWhenNoGatewayIsConfigured(t *testing.T) {
 	}
 }
 
-func TestTheFormOffersTheCountriesTheGatewayCanReach(t *testing.T) {
+func TestANumberTypedIntoTheOneBoxKeepsItsOwnCountry(t *testing.T) {
 	t.Setenv("TEST_SMS_KEY", "test-sms-key")
-	ts, _ := newTestServer(t, withGateway(newFakeGateway(t)))
+	gw := newFakeGateway(t)
+	ts, _ := newTestServer(t, withGateway(gw))
 
-	resp, err := http.Get(ts.URL + "/login")
-	if err != nil {
-		t.Fatalf("get login: %v", err)
-	}
+	// The one box has no country selector — there is nothing beside it to pick
+	// from — so a number outside the deployment's default country is written
+	// with its own calling code, and must not be read as a local one. This is
+	// the complaint the selector used to answer, in the form the door has now.
+	resp := postLogin(t, ts.URL+"/login", url.Values{"identifier": {"+96891234567"}})
 	defer resp.Body.Close()
 
-	body := readBody(t, resp)
-	// A selector, not a country baked into the form: the complaint this answers
-	// is that the only number anybody could sign in with was an Iranian one.
-	for _, want := range []string{`name="country"`, `value="IR"`, `value="OM"`, `value="GB"`} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("the form does not offer %s: %s", want, truncate(body))
-		}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("got %d, want the step that asks for the code", resp.StatusCode)
+	}
+	if got := gw.at(t, 0).To; got != "+96891234567" {
+		t.Fatalf("the code went to %q, want the Omani number as typed", got)
+	}
+
+	// And a number written the way it is dialled at home takes the default.
+	local := postLogin(t, ts.URL+"/login", url.Values{"identifier": {"09121234567"}})
+	defer local.Body.Close()
+
+	if got := gw.at(t, 1).To; got != "+989121234567" {
+		t.Fatalf("the code went to %q, want the national number in E.164", got)
 	}
 }
 

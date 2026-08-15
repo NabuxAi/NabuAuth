@@ -57,6 +57,10 @@ func (s *Server) handleUserInfo(w http.ResponseWriter, r *http.Request) {
 	}
 	if claims.HasScope("profile") {
 		body["phone"] = user.Phone
+		// The handle the account signs in with, where it has one. Apps show it
+		// beside the name; an empty string means the account has none, which is
+		// most of them.
+		body["preferred_username"] = user.Username
 		// Added beside phone rather than in place of anything: the published
 		// SDKs read this response and nothing here may move or change type.
 		// Unlike email_verified this one is really earned — a code went to the

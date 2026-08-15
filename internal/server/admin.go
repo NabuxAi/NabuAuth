@@ -97,10 +97,18 @@ func (s *Server) handleAdminCreateUser(w http.ResponseWriter, r *http.Request) {
 
 	email := strings.ToLower(strings.TrimSpace(r.PostFormValue("email")))
 	name := strings.TrimSpace(r.PostFormValue("name"))
+	username := strings.ToLower(strings.TrimSpace(r.PostFormValue("username")))
 	makeAdmin := r.PostFormValue("is_admin") == "yes"
 
 	if !validEmail(email) {
 		s.renderAdminUsers(w, r, admin, nil, "", "That email address does not look right.")
+		return
+	}
+	// Optional, and checked against the same pattern the door classifies by: a
+	// handle the sign-in box would read as something else could never be used
+	// to sign in with.
+	if username != "" && !usernamePattern.MatchString(username) {
+		s.renderAdminUsers(w, r, admin, nil, "", "A username is 3 to 32 characters: lowercase letters, digits, and . _ - in the middle.")
 		return
 	}
 	if name == "" {
@@ -136,6 +144,22 @@ func (s *Server) handleAdminCreateUser(w http.ResponseWriter, r *http.Request) {
 		s.log.Error("create user", "error", err)
 		s.renderAdminUsers(w, r, admin, nil, "", "Could not create the account. Try again.")
 		return
+	}
+	if username != "" {
+		switch err := s.store.SetUsername(r.Context(), user.ID, username); {
+		case errors.Is(err, store.ErrDuplicate):
+			// The account exists and works; only the handle was refused, and
+			// saying which of the two happened is the difference between a
+			// confused administrator and an informed one.
+			s.renderAdminUsers(w, r, admin, &user, password, "The account was created, but the username "+username+" is taken.")
+			return
+		case err != nil:
+			s.log.Error("set username", "error", err)
+			s.renderAdminUsers(w, r, admin, &user, password, "The account was created, but the username could not be saved.")
+			return
+		default:
+			user.Username = username
+		}
 	}
 	s.renderAdminUsers(w, r, admin, &user, password, "")
 }

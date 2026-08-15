@@ -86,7 +86,25 @@ func (s *Server) handlePhoneStart(w http.ResponseWriter, r *http.Request) {
 		fail(http.StatusBadRequest, "That phone number does not look right.")
 		return
 	}
+
+	s.startPhoneCode(w, r, view, e164)
+}
+
+// startPhoneCode sends a code to a number that has already been normalised, and
+// draws the step that asks for it back.
+//
+// Split out of handlePhoneStart because the one box on the first step reaches
+// this too: a visitor who typed a number there has already had it normalised,
+// and re-parsing a form they never filled in would mean inventing one.
+func (s *Server) startPhoneCode(w http.ResponseWriter, r *http.Request, view loginView, e164 string) {
 	view.Phone = e164
+	view.Identifier = e164
+	view.Kind = string(kindPhone)
+
+	fail := func(status int, msg string) {
+		view.PhoneError = msg
+		s.renderLoginView(w, r, status, view)
+	}
 
 	// Three keys, because the three abuses are different. The first stops one
 	// number being hammered; the second stops one visitor walking through many
@@ -213,7 +231,7 @@ func (s *Server) handlePhoneVerify(w http.ResponseWriter, r *http.Request) {
 	// The number is re-normalised rather than trusted as posted, so the row this
 	// looks up is the row the code was stored under whatever the field carried.
 	e164, ok := sms.Normalise(r.PostFormValue("phone"), s.cfg.Sms.DialFor(country))
-	view := loginView{Next: next, Country: country, Phone: e164, CodeSent: true}
+	view := loginView{Next: next, Country: country, Phone: e164, CodeSent: true, Identifier: e164, Kind: string(kindPhone)}
 	fail := func(status int, msg string) {
 		view.PhoneError = msg
 		s.renderLoginView(w, r, status, view)

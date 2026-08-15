@@ -25,6 +25,15 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_verified_at TIMESTAMPTZ;
 -- so this is safe on every boot.
 ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
 
+-- A username is the third thing somebody may type at the door. Plenty of people
+-- know the handle they picked and not which of their addresses the account was
+-- made with, and the door asks for one identifier without saying which kind it
+-- has to be. Nullable, because almost no account has one, and unique without
+-- regard to case, because "Hussein" and "hussein" being two accounts is a way to
+-- impersonate somebody.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_key ON users (lower(username));
+
 -- One-time codes for phone sign-in. Keyed by the number rather than by a user:
 -- the code is asked for before anyone knows whether an account exists, and this
 -- table must not become the place to ask. Only the hash is stored, for the same

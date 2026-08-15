@@ -33,6 +33,11 @@
         <span>Name <em>optional</em></span>
         <input type="text" name="name" autocomplete="off">
       </label>
+      <label>
+        <span>Username <em>optional — a third way to sign in</em></span>
+        <input type="text" name="username" autocomplete="off" autocapitalize="none" spellcheck="false"
+               pattern="[a-z0-9][a-z0-9._-]{1,30}[a-z0-9]">
+      </label>
       <label style="display:flex;gap:.5rem;align-items:center">
         <input type="checkbox" name="is_admin" value="yes" style="width:auto">
         <span>Administrator — can manage accounts</span>
@@ -44,12 +49,13 @@
   <section>
     <h2>Everyone</h2>
     <table class="ledger">
-      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Since</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>Email</th><th>Username</th><th>Role</th><th>Since</th><th></th></tr></thead>
       <tbody>
         {{range .Users}}
         <tr>
           <td>{{.Name}}</td>
           <td>{{.Email}}</td>
+          <td>{{if .Username}}{{.Username}}{{else}}<span class="muted">—</span>{{end}}</td>
           <td>{{if .IsAdmin}}<span class="badge">Administrator</span>{{else}}Member{{end}}</td>
           <td>{{.CreatedAt.Format "2006-01-02"}}</td>
           <td class="num">

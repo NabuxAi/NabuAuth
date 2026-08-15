@@ -37,15 +37,24 @@ to a single static binary and ships as a distroless image.
 - **Consent, remembered per app**, revocable from the account dashboard.
 - **Prepaid wallet** with a signed ledger, idempotent debits and overdraft
   protection.
-- **One sign-in form** — email and password in a single step. An email no
-  account uses is created from the same submission where the deployment allows
-  it; there is no separate sign-up form to pick first.
+- **One sign-in box** — email address, phone number or username, and the second
+  step asks for whatever proof fits it: a password for an address or a handle, a
+  one-time code for a number. There is no sign-up form to pick first, and an
+  email no account uses is created from the password step where the deployment
+  allows it. A form that posts `email` and `password` together still completes
+  in one step, so older integrations keep working.
 - **External sign-in methods** — any OIDC provider (Google, Microsoft, an
   enterprise IdP) configured in `login_methods`, matched to an account by the
   verified email it asserts.
-- **Phone sign-in** — a number, a country, and a one-time code by SMS, on the
-  same form. Offered only where an SMS gateway is configured, because a field
-  that cannot send a code would report one as sent.
+- **Phone sign-in** — type the number into the same box and a one-time code
+  arrives by SMS. Written as it is dialled at home it takes the deployment's
+  default country; written with a `+` it keeps its own. Offered only where an
+  SMS gateway is configured, because a box that cannot send a code would report
+  one as sent.
+- **Usernames** — an optional handle an administrator assigns on `/admin/users`,
+  unique without regard to case, reported as `preferred_username`. A handle
+  nobody holds never creates an account: there would be no address or number to
+  reach it by afterwards.
 - **Account UI**: sign in, app launcher, wallet history.
 
 ## Endpoints
@@ -55,7 +64,9 @@ to a single static binary and ships as a distroless image.
 | `GET /.well-known/openid-configuration` | Discovery document |
 | `GET /oauth/jwks.json` | Public signing keys |
 | `GET /oauth/authorize` | Login and consent screen |
-| `GET /login` | The one sign-in form: signs in, or creates the account |
+| `GET /login` | The one box: an email, a phone number or a username |
+| `POST /login` | Decide the second step from what was typed |
+| `POST /login/password` | The second step for an address or a handle |
 | `POST /login/phone` | Send a one-time code to a phone number |
 | `POST /login/phone/verify` | Type the code back and sign in |
 | `GET /login/{provider}` | Start an external sign-in method |

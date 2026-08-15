@@ -15,34 +15,44 @@
   {{end}}
 
   {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
+  {{if .PhoneError}}<p class="alert" role="alert">{{.PhoneError}}</p>{{end}}
+  {{if and .PhoneNotice (not .PhoneError)}}<p class="notice">{{.PhoneNotice}}</p>{{end}}
 
+  {{/* One box. What goes in it decides what the next step asks for, so the
+       visitor never has to know which kind of account they have. */}}
+  {{if eq .Kind ""}}
   <form method="post" action="/login" class="form">
     <input type="hidden" name="next" value="{{.Next}}">
     <label>
-      <span>Email</span>
-      <input type="email" name="email" value="{{.Email}}" autocomplete="username" inputmode="email" required{{if not .CodeSent}} autofocus{{end}}>
-    </label>
-    <label>
-      <span>Password</span>
-      <input type="password" name="password" autocomplete="current-password" required>
+      <span>Email, phone number or username</span>
+      <input type="text" name="identifier" value="{{.Identifier}}" autocomplete="username"
+             autocapitalize="none" spellcheck="false" required autofocus>
     </label>
     <button type="submit" class="primary">Continue</button>
   </form>
 
   {{if .AllowRegistration}}
-  <p class="muted hint">First time here? Entering an email no Nabu account uses creates one, with the password you type. There is nothing else to fill in.</p>
+  <p class="muted hint">First time here? Type an email no Nabu account uses and the next step creates one. There is nothing else to fill in.</p>
   {{else}}
   <p class="muted hint">Nabu accounts are created by an administrator. Ask your team to invite you.</p>
   {{end}}
 
-  {{/* The phone half. It is rendered only where a gateway is configured: a field
-       that cannot send a code would tell somebody a code is on its way when
-       none is, which is worse than not offering the option. */}}
   {{if .Sms}}
-  <div class="divider"><span>or use your phone</span></div>
+  <p class="muted hint">A phone number is signed in with a code by SMS. Write it as you dial it at home, or with a + and the country code.</p>
+  {{end}}
 
-  {{if .PhoneError}}<p class="alert" role="alert">{{.PhoneError}}</p>{{end}}
-  {{if and .PhoneNotice (not .PhoneError)}}<p class="notice">{{.PhoneNotice}}</p>{{end}}
+  {{if .Providers}}
+  <div class="divider"><span>or</span></div>
+  <div class="providers">
+    {{range .Providers}}
+    <a class="provider" href="/login/{{.ID}}{{if $.Next}}?next={{$.Next}}{{end}}">Continue with {{.Name}}</a>
+    {{end}}
+  </div>
+  {{end}}
+
+  {{/* Second step, phone: the code that was just sent. */}}
+  {{else if eq .Kind "phone"}}
+  <p class="muted hint" dir="ltr">{{.Identifier}}</p>
 
   {{if .CodeSent}}
   <form method="post" action="/login/phone/verify" class="form">
@@ -61,37 +71,29 @@
     <input type="hidden" name="country" value="{{.Country}}">
     <button type="submit" class="ghost small">Send another code</button>
   </form>
-  {{else}}
-  <form method="post" action="/login/phone" class="form">
-    <input type="hidden" name="next" value="{{.Next}}">
-    <label>
-      <span>Phone number</span>
-      {{/* A native select and a plain input, working with no JavaScript at all:
-           this form is the one page that must never depend on a script having
-           loaded. */}}
-      <span class="phone-field">
-        <select name="country" aria-label="Country calling code">
-          {{$selected := .Country}}
-          {{range .Countries}}
-          <option value="{{.Code}}"{{if eq .Code $selected}} selected{{end}}>{{.Name}} +{{.Dial}}</option>
-          {{end}}
-        </select>
-        <input type="tel" name="phone" inputmode="tel" autocomplete="tel" required>
-      </span>
-    </label>
-    <button type="submit" class="primary">Send me a code</button>
-  </form>
-  <p class="muted hint">We send a one-time code by SMS. Choose the country your number belongs to — the code will not arrive if it is dialled as another country's.</p>
-  {{end}}
   {{end}}
 
-  {{if .Providers}}
-  <div class="divider"><span>or</span></div>
-  <div class="providers">
-    {{range .Providers}}
-    <a class="provider" href="/login/{{.ID}}{{if $.Next}}?next={{$.Next}}{{end}}">Continue with {{.Name}}</a>
-    {{end}}
-  </div>
+  <p class="muted hint"><a href="/login{{if .Next}}?next={{.Next}}{{end}}">Use a different account</a></p>
+
+  {{/* Second step, address or handle: the password. */}}
+  {{else}}
+  <p class="muted hint" dir="ltr">{{.Identifier}}</p>
+
+  <form method="post" action="/login/password" class="form">
+    <input type="hidden" name="next" value="{{.Next}}">
+    <input type="hidden" name="identifier" value="{{.Identifier}}">
+    <label>
+      <span>Password</span>
+      <input type="password" name="password" autocomplete="current-password" required autofocus>
+    </label>
+    <button type="submit" class="primary">Sign in</button>
+  </form>
+
+  {{if and .AllowRegistration (eq .Kind "email")}}
+  <p class="muted hint">If no Nabu account uses this address yet, the password you type creates one.</p>
+  {{end}}
+
+  <p class="muted hint"><a href="/login{{if .Next}}?next={{.Next}}{{end}}">Use a different account</a></p>
   {{end}}
 </main>
 {{template "foot" .}}{{end}}

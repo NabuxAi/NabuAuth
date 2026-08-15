@@ -114,6 +114,10 @@ func (s *Server) Handler() http.Handler {
 	// working rather than 404ing somebody mid-sign-in.
 	mux.HandleFunc("GET /register", s.handleRegisterRedirect)
 	mux.HandleFunc("POST /register", s.handleLoginSubmit)
+	// The second step for an address or a handle. Its own path so an empty
+	// password there is answered as an empty password rather than read as
+	// somebody asking the first question again.
+	mux.HandleFunc("POST /login/password", s.handleLoginPassword)
 	// Phone sign-in: ask for a code, then type it back. Both are POST, so
 	// neither collides with the GET /login/{provider} pattern below, and the
 	// config refuses a provider whose id is "phone".

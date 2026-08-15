@@ -8,13 +8,16 @@ import (
 	"net/mail"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"golang.org/x/crypto/bcrypt"
 
+	"nabuauth/internal/sms"
 	"nabuauth/internal/store"
 )
 
@@ -130,12 +133,82 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/login", http.StatusFound)
 }
 
-// handleLoginForm renders the one door into the ecosystem: a single step, email
-// and password together. There is no separate sign-up form to send people to,
-// because a visitor arriving from an app does not know yet whether they have a
-// Nabu account — the ecosystem may have made one for them through another app.
-// Asking them to choose the right form first is asking a question they cannot
-// answer.
+// The door asks one question at a time.
+//
+// It used to ask several at once: an email and a password side by side, a phone
+// field under them, and a row of providers under that — four ways in, all on
+// screen together, and the visitor had to decide which of them they were before
+// typing anything. So the first step is one box that takes whatever they know
+// about themselves — the address, the number, or the handle — and the second
+// asks for the one proof that fits what they typed.
+type identifierKind string
+
+const (
+	kindUnknown  identifierKind = ""
+	kindEmail    identifierKind = "email"
+	kindPhone    identifierKind = "phone"
+	kindUsername identifierKind = "username"
+)
+
+// A handle is deliberately narrow: lowercase letters, digits and the three
+// separators, starting and ending on an alphanumeric. Anything looser and a
+// typo'd email address with the '@' missing would be taken for a username and
+// answered with the wrong question.
+var usernamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{1,30}[a-z0-9]$`)
+
+// classifyIdentifier decides which of the three the visitor typed, and returns
+// it in the form the lookups use: a lowercase address, an E.164 number, or a
+// lowercase handle.
+func classifyIdentifier(raw, dial string) (identifierKind, string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return kindUnknown, ""
+	}
+
+	if strings.Contains(raw, "@") {
+		email := strings.ToLower(raw)
+		if !validEmail(email) {
+			return kindUnknown, raw
+		}
+		return kindEmail, email
+	}
+
+	// Digits, spacing and the punctuation people write numbers with, and nothing
+	// else. Eastern Arabic digits count: a Persian keyboard produces them, and
+	// sms.Normalise already folds them to ASCII.
+	if looksLikeNumber(raw) {
+		if e164, ok := sms.Normalise(raw, dial); ok {
+			return kindPhone, e164
+		}
+		return kindUnknown, raw
+	}
+
+	handle := strings.ToLower(raw)
+	if usernamePattern.MatchString(handle) {
+		return kindUsername, handle
+	}
+	return kindUnknown, raw
+}
+
+func looksLikeNumber(s string) bool {
+	digits := false
+	for _, r := range s {
+		switch {
+		case unicode.IsDigit(r):
+			digits = true
+		case r == '+' || r == '-' || r == ' ' || r == '(' || r == ')' || r == '.':
+		default:
+			return false
+		}
+	}
+	return digits
+}
+
+// handleLoginForm renders the first step: one box, and nothing else to decide.
+// There is no separate sign-up form to send people to, because a visitor
+// arriving from an app does not know yet whether they have a Nabu account — the
+// ecosystem may have made one for them through another app. Asking them to
+// choose the right form first is asking a question they cannot answer.
 func (s *Server) handleLoginForm(w http.ResponseWriter, r *http.Request) {
 	next := safeNext(r.URL.Query().Get("next"))
 	if _, ok := s.currentUser(r); ok && next != "" {
@@ -145,39 +218,113 @@ func (s *Server) handleLoginForm(w http.ResponseWriter, r *http.Request) {
 	s.renderLogin(w, r, http.StatusOK, next, "", "")
 }
 
-// handleLoginSubmit signs the visitor in, or creates the account and signs them
-// in, from the same submission. Which of the two happened is never a question
-// the form asked: the email either has an account behind it or it does not.
+// handleLoginSubmit takes the identifier and decides what the second step is: a
+// code for a number, a password for an address or a handle.
+//
+// A submission that carries a password as well is answered in one step. That is
+// how every form in the ecosystem posted here before this page had two, and a
+// visitor whose browser filled both fields should not be sent back a step.
 func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(r.PostFormValue("email")))
-	password := r.PostFormValue("password")
 	next := safeNext(r.PostFormValue("next"))
-	key := email + "|" + clientIP(r)
+	typed := r.PostFormValue("identifier")
+	if strings.TrimSpace(typed) == "" {
+		typed = r.PostFormValue("email")
+	}
+	password := r.PostFormValue("password")
+
+	kind, value := classifyIdentifier(typed, s.cfg.Sms.DialFor(""))
+
+	switch kind {
+	case kindUnknown:
+		s.renderLogin(w, r, http.StatusBadRequest, next, typed,
+			"That is not an email address, a phone number or a username.")
+
+	case kindPhone:
+		if s.sms == nil {
+			// Nothing here can send a code, and saying "check your messages"
+			// when no message is coming is the one failure this door exists to
+			// not repeat.
+			s.renderLogin(w, r, http.StatusBadRequest, next, typed,
+				"Signing in with a phone number is not available here. Use your email address instead.")
+			return
+		}
+		s.startPhoneCode(w, r, loginView{Next: next, Identifier: value, Kind: string(kindPhone)}, value)
+
+	default:
+		if password != "" {
+			s.finishPassword(w, r, next, kind, value, password)
+			return
+		}
+		s.renderCredential(w, r, http.StatusOK, next, kind, value, "")
+	}
+}
+
+// handleLoginPassword is the second step for an address or a handle.
+func (s *Server) handleLoginPassword(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	next := safeNext(r.PostFormValue("next"))
+	kind, value := classifyIdentifier(r.PostFormValue("identifier"), s.cfg.Sms.DialFor(""))
+	password := r.PostFormValue("password")
+
+	switch {
+	case kind == kindUnknown || kind == kindPhone:
+		// The identifier came back changed, or was never one this step can
+		// answer. Start again rather than guess which of the two happened.
+		s.renderLogin(w, r, http.StatusBadRequest, next, r.PostFormValue("identifier"),
+			"Start again — that is not an email address or a username.")
+	case password == "":
+		s.renderCredential(w, r, http.StatusBadRequest, next, kind, value, "Enter your password.")
+	default:
+		s.finishPassword(w, r, next, kind, value, password)
+	}
+}
+
+// finishPassword signs the visitor in against a password, and — for an address
+// nobody holds, where the deployment allows it — creates the account first.
+// Which of the two happened is never a question the form asked.
+func (s *Server) finishPassword(w http.ResponseWriter, r *http.Request, next string, kind identifierKind, value, password string) {
+	key := string(kind) + ":" + value + "|" + clientIP(r)
+
+	// One sentence for every refusal this step can produce, so it never becomes
+	// a way to ask which addresses or handles hold accounts.
+	refusal := "Wrong email or password."
+	if kind == kindUsername {
+		refusal = "Wrong username or password."
+	}
 
 	fail := func(status int, msg string) {
-		s.renderLogin(w, r, status, next, email, msg)
+		s.renderCredential(w, r, status, next, kind, value, msg)
 	}
 
 	if s.throttle.blocked(key) {
 		fail(http.StatusTooManyRequests, "Too many failed attempts. Try again in a few minutes.")
 		return
 	}
-	if !validEmail(email) {
-		fail(http.StatusBadRequest, "That email address does not look right.")
-		return
+
+	var (
+		user    store.User
+		err     error
+		created bool
+	)
+
+	if kind == kindUsername {
+		user, err = s.store.UserByUsername(r.Context(), value)
+	} else {
+		user, err = s.store.UserByEmail(r.Context(), value)
 	}
 
-	user, err := s.store.UserByEmail(r.Context(), email)
-	created := false
 	switch {
 	case err == nil:
 		if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) != nil {
 			s.throttle.fail(key)
-			fail(http.StatusUnauthorized, "Wrong email or password.")
+			fail(http.StatusUnauthorized, refusal)
 			return
 		}
 		if !user.IsActive {
@@ -189,29 +336,38 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 		fail(http.StatusInternalServerError, "Could not sign you in. Try again.")
 		return
 
+	// A handle nobody holds is never a sign-up: a username on its own is not an
+	// address or a number, so there would be no way to reach the account later.
+	// Same sentence as a wrong password, for the same reason.
+	case kind == kindUsername:
+		_ = bcrypt.CompareHashAndPassword([]byte(dummyHash), []byte(password))
+		s.throttle.fail(key)
+		fail(http.StatusUnauthorized, refusal)
+		return
+
 	// No account with that email. Where sign-up is closed the answer has to be
 	// the same sentence a wrong password gets, or this form becomes a way to ask
 	// which addresses hold accounts.
 	case !s.registrationOpen(r):
 		// Spend the same time a real comparison would, so the two answers cannot
 		// be told apart by how long they take either.
-		_ = bcrypt.CompareHashAndPassword([]byte("$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvalidin"), []byte(password))
+		_ = bcrypt.CompareHashAndPassword([]byte(dummyHash), []byte(password))
 		s.throttle.fail(key)
-		fail(http.StatusUnauthorized, "Wrong email or password.")
+		fail(http.StatusUnauthorized, refusal)
 		return
 
 	default:
 		if len(password) < minPasswordLen {
 			// The account does not exist, so this is a sign-up, and saying so is
 			// what stops a mistyped address from reading as a broken password.
-			fail(http.StatusBadRequest, fmt.Sprintf("No Nabu account uses %s yet. To create one now, choose a password of at least %d characters.", email, minPasswordLen))
+			fail(http.StatusBadRequest, fmt.Sprintf("No Nabu account uses %s yet. To create one now, choose a password of at least %d characters.", value, minPasswordLen))
 			return
 		}
-		user, err = s.createAccount(r, email, password)
+		user, err = s.createAccount(r, value, password)
 		if errors.Is(err, store.ErrDuplicate) {
 			// Two submissions raced. The account exists now, so the second one is
 			// an ordinary sign-in that has to prove the password.
-			fail(http.StatusUnauthorized, "Wrong email or password.")
+			fail(http.StatusUnauthorized, refusal)
 			return
 		}
 		if err != nil {
@@ -247,6 +403,10 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, next, http.StatusFound)
 }
 
+// dummyHash is compared against when there is no account, so a refusal costs
+// the same time a real comparison does.
+const dummyHash = "$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvalidin"
+
 // createAccount makes the account behind an email nobody has claimed yet.
 func (s *Server) createAccount(r *http.Request, email, password string) (store.User, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -272,12 +432,18 @@ func (s *Server) handleRegisterRedirect(w http.ResponseWriter, r *http.Request) 
 	http.Redirect(w, r, target, http.StatusFound)
 }
 
-// loginView is everything the one form can be showing at once: the email half,
-// the phone half, and which of the two just went wrong.
+// loginView is the state of the door: which step it is on, what was typed into
+// the one box, and what went wrong.
 type loginView struct {
 	Next  string
 	Email string
 	Error string
+
+	// Identifier is what the visitor typed, normalised — the address, the
+	// number or the handle — and Kind which of the three it was. Empty Kind is
+	// the first step, where nothing has been decided yet.
+	Identifier string
+	Kind       string
 
 	// The phone half. Phone is the E.164 number a code was just sent to, and
 	// Country the ISO code the visitor picked, kept so a refused submission
@@ -292,17 +458,31 @@ type loginView struct {
 // renderLogin draws the sign-in page, naming the application that sent the
 // visitor here so the page does not look like an unrelated site asking for a
 // password.
-func (s *Server) renderLogin(w http.ResponseWriter, r *http.Request, status int, next, email, errMsg string) {
-	s.renderLoginView(w, r, status, loginView{Next: next, Email: email, Error: errMsg})
+func (s *Server) renderLogin(w http.ResponseWriter, r *http.Request, status int, next, identifier, errMsg string) {
+	s.renderLoginView(w, r, status, loginView{Next: next, Identifier: identifier, Email: identifier, Error: errMsg})
+}
+
+// renderCredential draws the second step for an address or a handle: the one
+// box replaced by what was typed, and a field for the password.
+func (s *Server) renderCredential(w http.ResponseWriter, r *http.Request, status int, next string, kind identifierKind, value, errMsg string) {
+	s.renderLoginView(w, r, status, loginView{
+		Next:       next,
+		Identifier: value,
+		Email:      value,
+		Kind:       string(kind),
+		Error:      errMsg,
+	})
 }
 
 func (s *Server) renderLoginView(w http.ResponseWriter, r *http.Request, status int, v loginView) {
 	s.render(w, status, "login.html", map[string]any{
-		"Title": "Sign in to Nabu",
-		"Next":  v.Next,
-		"Email": v.Email,
-		"Error": v.Error,
-		"App":   s.connectingApp(r, v.Next),
+		"Title":      "Sign in to Nabu",
+		"Next":       v.Next,
+		"Email":      v.Email,
+		"Identifier": v.Identifier,
+		"Kind":       v.Kind,
+		"Error":      v.Error,
+		"App":        s.connectingApp(r, v.Next),
 		// What the page tells the visitor about an unknown email has to match
 		// what the submission will actually do — which includes the case where
 		// sign-up is closed but the database has no accounts yet.
