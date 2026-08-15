@@ -45,7 +45,23 @@ to a single static binary and ships as a distroless image.
   in one step, so older integrations keep working.
 - **External sign-in methods** — any OIDC provider (Google, Microsoft, an
   enterprise IdP) configured in `login_methods`, matched to an account by the
-  verified email it asserts.
+  verified email it asserts. Google is already listed in `apps.yaml`; give it
+  these two and the button appears on the form:
+
+  ```
+  GOOGLE_CLIENT_ID=<the client id from Google Cloud Console>
+  NABUAUTH_PROVIDER_SECRET_GOOGLE=<the client secret>
+  ```
+
+  The **Authorized redirect URI** to register with Google is the issuer plus
+  the provider's callback — for this deployment:
+
+  ```
+  https://auth.nabuxai.com/login/google/callback
+  ```
+
+  Nothing else is registered with Google. Every app in the ecosystem signs in
+  through NabuAuth, so NabuDesk's own hostnames never appear in that list.
 - **Phone sign-in** — type the number into the same box and a one-time code
   arrives by SMS. Written as it is dialled at home it takes the deployment's
   default country; written with a `+` it keeps its own. Offered only where an

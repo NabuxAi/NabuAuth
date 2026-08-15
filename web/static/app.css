@@ -171,15 +171,29 @@ button, .primary {
 
 .providers { display: grid; gap: .55rem; }
 .provider {
-  padding: .65rem 1.05rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .6rem;
+  padding: .7rem 1.05rem;
   border: 1px solid var(--line);
   border-radius: 9px;
   color: var(--text);
   font-weight: 600;
   text-align: center;
   text-decoration: none;
+  transition: border-color .15s, background-color .15s;
 }
 .provider:hover { border-color: var(--accent); }
+
+/* The provider mark keeps its own colours and its own size whatever the theme
+   does to the button around it. */
+.provider-mark { width: 18px; height: 18px; flex: 0 0 auto; }
+
+/* Google asks for its button on white with its own grey border, in light and
+   in dark alike, so the mark is always on the background it was drawn for. */
+.provider-google { background: #fff; color: #1f1f1f; border-color: #dadce0; }
+.provider-google:hover { background: #f7f8f8; border-color: #d2d5d9; }
 
 .scopes { margin: 0 0 1.5rem; padding: 0; list-style: none; display: grid; gap: .55rem; }
 .scopes li { display: flex; gap: .55rem; align-items: baseline; }

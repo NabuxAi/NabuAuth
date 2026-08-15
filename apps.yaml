@@ -172,12 +172,16 @@ apps:
 # The redirect URI to register with the provider is:
 #     <issuer>/login/<id>/callback
 #
-# login_methods:
-#   - id: google
-#     name: Google
-#     authorize_url: https://accounts.google.com/o/oauth2/v2/auth
-#     token_url: https://oauth2.googleapis.com/token
-#     userinfo_url: https://openidconnect.googleapis.com/v1/userinfo
-#     client_id: ${GOOGLE_CLIENT_ID}
-#     scopes: [openid, email, profile]
-#     secret_env: NABUAUTH_PROVIDER_SECRET_GOOGLE
+# Google is listed rather than commented out: a provider whose client id or
+# secret is missing is not offered at all (Provider.Configured), so this line
+# does nothing until GOOGLE_CLIENT_ID and NABUAUTH_PROVIDER_SECRET_GOOGLE are
+# set — and the day they are, the button appears without a deploy of this file.
+login_methods:
+  - id: google
+    name: Google
+    authorize_url: https://accounts.google.com/o/oauth2/v2/auth
+    token_url: https://oauth2.googleapis.com/token
+    userinfo_url: https://openidconnect.googleapis.com/v1/userinfo
+    client_id: ${GOOGLE_CLIENT_ID}
+    scopes: [openid, email, profile]
+    secret_env: NABUAUTH_PROVIDER_SECRET_GOOGLE
