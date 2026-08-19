@@ -141,7 +141,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(web.Static()))))
 
-	return s.recover(s.limitBody(mux))
+	return s.recover(s.limitBody(s.cors(mux)))
 }
 
 // recover turns a handler panic into a 500 instead of killing the process and
