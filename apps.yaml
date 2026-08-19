@@ -136,6 +136,22 @@ apps:
     scopes: [openid, profile, email, offline]
     secret_env: NABUAUTH_SECRET_REELMIND
 
+  - id: nabupilot-office
+    name: NabuPilot
+    description: 3D virtual office where AI employees run the business
+    icon: building-office-2
+    url: https://pilot.nabuxai.com
+    badge: Active
+    # The office is a browser SPA served as static files by its own backend, so
+    # it holds no secret and authenticates with PKCE alone.
+    public: true
+    redirect_uris:
+      # The office lives at this exact path; the client pins it rather than
+      # sending whatever page the visitor started from, because redirect URIs
+      # are matched by exact string.
+      - https://pilot.nabuxai.com/virtual-office/
+    scopes: [openid, profile, email, wallet, offline]
+
   - id: nabuchat
     name: NabuChat
     description: AI chat agents trained on your own documents
