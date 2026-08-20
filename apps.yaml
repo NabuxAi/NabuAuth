@@ -146,10 +146,12 @@ apps:
     # it holds no secret and authenticates with PKCE alone.
     public: true
     redirect_uris:
-      # The office lives at this exact path; the client pins it rather than
-      # sending whatever page the visitor started from, because redirect URIs
-      # are matched by exact string.
+      # Both clients of the same product: the 3D office and the plain-HTML one a
+      # phone gets. Each is listed in full because redirect URIs are matched by
+      # exact string, and the browser returns to whichever it signed in from —
+      # coming back from a phone into the 3D office is not where the visitor was.
       - https://pilot.nabuxai.com/virtual-office/
+      - https://pilot.nabuxai.com/webapp/
     scopes: [openid, profile, email, wallet, offline]
 
   - id: nabuchat
