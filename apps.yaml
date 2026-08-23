@@ -167,6 +167,30 @@ apps:
     scopes: [openid, profile, email, offline]
     secret_env: NABUAUTH_SECRET_NABUCHAT
 
+  - id: nabuhub
+    name: NabuHub
+    description: One panel for every Nabu service
+    icon: squares-2x2
+    url: https://hub.nabuxai.com
+    badge: Active
+    redirect_uris:
+      - https://hub.nabuxai.com/auth/callback
+    # Reads the wallet to show a balance; it never charges one, so no
+    # wallet.write. offline lets a signed-in tab survive a restart of the hub.
+    scopes: [openid, profile, email, wallet, offline]
+    secret_env: NABUAUTH_SECRET_NABUHUB
+
+  - id: nabucrm
+    name: NabuCRM
+    description: Customers, deals and follow-ups
+    icon: users
+    url: https://crm.nabuxai.com
+    badge: New
+    redirect_uris:
+      - https://crm.nabuxai.com/auth/nabu/callback
+    scopes: [openid, profile, email, offline]
+    secret_env: NABUAUTH_SECRET_NABUCRM
+
 # Not yet registered, because they have no sign-in callback to register:
 #
 #   nabusu       — no account system at all; it is a local companion talking to
