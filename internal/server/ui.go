@@ -453,6 +453,11 @@ type loginView struct {
 	PhoneError  string
 	PhoneNotice string
 	CodeSent    bool
+
+	// The email-code half. It needs no address field of its own — Identifier
+	// already carries it — only the error and notice the step answers with.
+	EmailError  string
+	EmailNotice string
 }
 
 // renderLogin draws the sign-in page, naming the application that sent the
@@ -498,6 +503,11 @@ func (s *Server) renderLoginView(w http.ResponseWriter, r *http.Request, status 
 		"PhoneError":  v.PhoneError,
 		"PhoneNotice": v.PhoneNotice,
 		"CodeSent":    v.CodeSent,
+		// The email-code offer on the password step exists only where a relay is
+		// configured, on the same terms as the phone field.
+		"Mail":        s.mail != nil,
+		"EmailError":  v.EmailError,
+		"EmailNotice": v.EmailNotice,
 	})
 }
 

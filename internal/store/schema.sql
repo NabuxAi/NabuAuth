@@ -48,6 +48,17 @@ CREATE TABLE IF NOT EXISTS phone_codes (
     expires_at TIMESTAMPTZ NOT NULL
 );
 
+-- One-time codes for email sign-in, on exactly the terms phone codes get: keyed
+-- by the address and never by a user, hashed at rest, and replaced — not
+-- accumulated — on a resend.
+CREATE TABLE IF NOT EXISTS email_codes (
+    email      TEXT PRIMARY KEY,
+    code_hash  TEXT        NOT NULL,
+    attempts   INT         NOT NULL DEFAULT 0,
+    sent_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at TIMESTAMPTZ NOT NULL
+);
+
 -- Registered ecosystem apps. Rows are upserted from apps.yaml on boot, so the
 -- config file — not a dashboard click — is the source of truth for who may sign
 -- users in.

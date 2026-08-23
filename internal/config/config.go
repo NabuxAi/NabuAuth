@@ -27,6 +27,12 @@ type Config struct {
 	// terms as a login method: the key is the name of an env var, and the phone
 	// field is not offered at all until the deployment has one.
 	Sms Sms `yaml:"sms"`
+
+	// Mail is the SMTP relay that carries one-time codes by email. Configured on
+	// the same terms as the SMS gateway: the values arrive through environment
+	// variables, and the option is not offered at all until the deployment has
+	// a relay.
+	Mail Mail `yaml:"mail"`
 }
 
 // Sms points at the NabuSms gateway and says how to address it.
@@ -102,6 +108,59 @@ func (s Sms) DialFor(iso string) string {
 		}
 	}
 	return s.DefaultCountry
+}
+
+// Mail points at the SMTP relay that carries sign-in codes and says how to
+// address it.
+type Mail struct {
+	// Host and Port are the submission server; Port defaults to 587, where
+	// STARTTLS is expected rather than optional.
+	Host string `yaml:"host"`
+	Port int    `yaml:"port"`
+
+	// Username and Password authenticate the send. Empty means the relay takes
+	// mail from this host without it, which only a relay on the same machine
+	// should ever do.
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+
+	// From is the address codes are sent as, defaulting to the username — the
+	// one address an authenticated relay is known to let through. FromName is
+	// the display name beside it, defaulting to the deployment's own name.
+	From     string `yaml:"from"`
+	FromName string `yaml:"from_name"`
+
+	// CodeTTL is how long a sent code stays usable, and ResendAfter how long a
+	// visitor must wait before another one is sent to the same address.
+	CodeTTL     string `yaml:"code_ttl"`
+	ResendAfter string `yaml:"resend_after"`
+}
+
+// Configured reports whether codes can actually be sent. An email-code option
+// on a deployment with no relay would claim a code was sent when nothing was,
+// which is the failure this whole path exists to avoid.
+func (m Mail) Configured() bool { return m.Host != "" && m.From != "" }
+
+// ApplyDefaults fills in everything the mail block does not have to say.
+// Exported because Load is not the only way a Config is built — a caller
+// assembling one in code gets the same port and wording as a deployment reading
+// the file, rather than a half-configured relay.
+func (m *Mail) ApplyDefaults() {
+	if m.Port == 0 {
+		m.Port = 587
+	}
+	if m.From == "" {
+		m.From = m.Username
+	}
+	if m.FromName == "" {
+		m.FromName = "Nabu"
+	}
+	if m.CodeTTL == "" {
+		m.CodeTTL = "5m"
+	}
+	if m.ResendAfter == "" {
+		m.ResendAfter = "60s"
+	}
 }
 
 // Provider is one external sign-in method.
@@ -232,6 +291,7 @@ func (c *Config) applyDefaults() {
 		}
 	}
 	c.Sms.ApplyDefaults()
+	c.Mail.ApplyDefaults()
 }
 
 // DefaultCountries is the selector's contents when the config lists none: the
@@ -343,10 +403,13 @@ func (c *Config) validate() error {
 			return fmt.Errorf("login_method %q: duplicate id", p.ID)
 		}
 		seenProvider[p.ID] = true
-		// "phone" is the built-in method's own path segment. A provider claiming
-		// it would put two different sign-ins under one URL.
-		if p.ID == "phone" {
+		// "phone" and "email" are the built-in methods' own path segments. A
+		// provider claiming one would put two different sign-ins under one URL.
+		switch p.ID {
+		case "phone":
 			return fmt.Errorf("login_method %q: that id belongs to the built-in phone sign-in", p.ID)
+		case "email":
+			return fmt.Errorf("login_method %q: that id belongs to the built-in email sign-in", p.ID)
 		}
 		// A provider reached over plaintext hands the code, the secret and the
 		// user's identity to whoever is on the wire.
@@ -384,6 +447,8 @@ func (c *Config) validate() error {
 		{"server.code_ttl", c.Server.CodeTTL},
 		{"sms.code_ttl", c.Sms.CodeTTL},
 		{"sms.resend_after", c.Sms.ResendAfter},
+		{"mail.code_ttl", c.Mail.CodeTTL},
+		{"mail.resend_after", c.Mail.ResendAfter},
 	} {
 		if d.value == "" {
 			continue

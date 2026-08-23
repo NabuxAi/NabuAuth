@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"nabuauth/internal/config"
+	"nabuauth/internal/mail"
 	"nabuauth/internal/sms"
 	"nabuauth/internal/store"
 	"nabuauth/internal/tokens"
@@ -48,6 +49,13 @@ type Server struct {
 	phoneTTL    time.Duration
 	phoneResend time.Duration
 
+	// mail is nil unless the deployment configured an SMTP relay, on the same
+	// terms as sms: nil is what keeps the email-code offer off the form rather
+	// than present and broken.
+	mail       *mail.Client
+	mailTTL    time.Duration
+	mailResend time.Duration
+
 	throttle *throttle
 }
 
@@ -60,6 +68,10 @@ func New(cfg *config.Config, st *store.Store, keys *tokens.Keyring, log *slog.Lo
 	var gateway *sms.Client
 	if cfg.Sms.Configured() {
 		gateway = sms.New(cfg.Sms)
+	}
+	var mailer *mail.Client
+	if cfg.Mail.Configured() {
+		mailer = mail.New(cfg.Mail)
 	}
 	return &Server{
 		cfg:         cfg,
@@ -74,6 +86,9 @@ func New(cfg *config.Config, st *store.Store, keys *tokens.Keyring, log *slog.Lo
 		sms:         gateway,
 		phoneTTL:    config.Duration(cfg.Sms.CodeTTL, 5*time.Minute),
 		phoneResend: config.Duration(cfg.Sms.ResendAfter, time.Minute),
+		mail:        mailer,
+		mailTTL:     config.Duration(cfg.Mail.CodeTTL, 5*time.Minute),
+		mailResend:  config.Duration(cfg.Mail.ResendAfter, time.Minute),
 		throttle:    newThrottle(),
 	}, nil
 }
@@ -123,6 +138,10 @@ func (s *Server) Handler() http.Handler {
 	// config refuses a provider whose id is "phone".
 	mux.HandleFunc("POST /login/phone", s.handlePhoneStart)
 	mux.HandleFunc("POST /login/phone/verify", s.handlePhoneVerify)
+	// A code by email, offered from the password step on the same terms: both
+	// POST, and the config refuses a provider whose id is "email".
+	mux.HandleFunc("POST /login/email", s.handleEmailCodeStart)
+	mux.HandleFunc("POST /login/email/verify", s.handleEmailCodeVerify)
 	// External sign-in methods, one route pair for every provider a deployment
 	// configures.
 	mux.HandleFunc("GET /login/{provider}", s.handleProviderStart)

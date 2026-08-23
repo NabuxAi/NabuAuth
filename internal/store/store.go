@@ -105,9 +105,10 @@ type User struct {
 	AvatarURL    string
 	IsActive     bool
 	IsAdmin      bool
-	// EmailVerified reports whether email_verified_at is set. Nothing sets it
-	// yet — there is no mail delivery — so it is false for every account, and
-	// the id_token says so rather than claiming otherwise.
+	// EmailVerified reports whether email_verified_at is set. It turns true when
+	// an address proves itself by a one-time code sent to it; an account that
+	// only ever used a password stays false, and the id_token says so rather
+	// than claiming otherwise.
 	EmailVerified bool
 	// PhoneVerified reports whether the number was proved by a one-time code
 	// sent to it. Unlike the email flag this one is really set, by the phone
@@ -221,6 +222,14 @@ func (s *Store) MarkPhoneVerified(ctx context.Context, id int64) error {
 	return err
 }
 
+// MarkEmailVerified records that a code sent to this account's address came
+// back — the first thing that actually proves a mailbox, which is why the claim
+// stays false until it happens.
+func (s *Store) MarkEmailVerified(ctx context.Context, id int64) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE users SET email_verified_at = now(), updated_at = now() WHERE id = $1`, id)
+	return err
+}
+
 // UserByID looks an account up by primary key.
 func (s *Store) UserByID(ctx context.Context, id int64) (User, error) {
 	return scanUser(s.db.QueryRowContext(ctx, `SELECT `+userColumns+` FROM users WHERE id = $1`, id))
@@ -320,6 +329,74 @@ func (s *Store) BumpPhoneCodeAttempts(ctx context.Context, phone string) (int, e
 // what makes replaying one useless.
 func (s *Store) DeletePhoneCode(ctx context.Context, phone string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM phone_codes WHERE phone = $1`, phone)
+	return err
+}
+
+// ---------------------------------------------------------------- email codes
+
+// EmailCode is a one-time code waiting to be typed back.
+type EmailCode struct {
+	Email     string
+	CodeHash  string
+	Attempts  int
+	SentAt    time.Time
+	ExpiresAt time.Time
+}
+
+// MaxEmailCodeAttempts is how many wrong guesses one code tolerates before it
+// is spent. Six digits is a million possibilities, which is plenty against a
+// human and nothing against a script, so the count — not the length — is what
+// keeps the code from being enumerable inside its five minutes.
+const MaxEmailCodeAttempts = 5
+
+// SaveEmailCode stores the hash of a freshly sent code, replacing whatever was
+// outstanding for that address so a resend cannot leave two codes live at once.
+// Replacing also resets the attempt count, which is why a resend is throttled
+// separately: otherwise it would be a way to buy unlimited guesses.
+func (s *Store) SaveEmailCode(ctx context.Context, email, codeHash string, expiresAt time.Time) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO email_codes (email, code_hash, attempts, sent_at, expires_at)
+		VALUES ($1, $2, 0, now(), $3)
+		ON CONFLICT (email) DO UPDATE SET
+			code_hash = EXCLUDED.code_hash,
+			attempts = 0,
+			sent_at = now(),
+			expires_at = EXCLUDED.expires_at`,
+		email, codeHash, expiresAt)
+	return err
+}
+
+// EmailCode returns the outstanding code for an address, expired or not. The
+// caller decides what an expired one means, so that "there was never a code"
+// and "the code ran out" can be answered with the same sentence.
+func (s *Store) EmailCode(ctx context.Context, email string) (EmailCode, error) {
+	var c EmailCode
+	err := s.db.QueryRowContext(ctx,
+		`SELECT email, code_hash, attempts, sent_at, expires_at FROM email_codes WHERE email = $1`, email).
+		Scan(&c.Email, &c.CodeHash, &c.Attempts, &c.SentAt, &c.ExpiresAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return EmailCode{}, ErrNotFound
+	}
+	return c, err
+}
+
+// BumpEmailCodeAttempts counts a wrong guess and reports how many have been
+// made. The count is in the database rather than in memory so restarting the
+// process does not hand a guesser a fresh budget.
+func (s *Store) BumpEmailCodeAttempts(ctx context.Context, email string) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`UPDATE email_codes SET attempts = attempts + 1 WHERE email = $1 RETURNING attempts`, email).Scan(&n)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	return n, err
+}
+
+// DeleteEmailCode spends a code. Like consuming an authorization code, this is
+// what makes replaying one useless.
+func (s *Store) DeleteEmailCode(ctx context.Context, email string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM email_codes WHERE email = $1`, email)
 	return err
 }
 
@@ -879,6 +956,7 @@ func (s *Store) Cleanup(ctx context.Context) error {
 		`DELETE FROM oauth_refresh_tokens WHERE expires_at < now() - interval '7 days'`,
 		`DELETE FROM sessions WHERE expires_at < now()`,
 		`DELETE FROM phone_codes WHERE expires_at < now() - interval '1 day'`,
+		`DELETE FROM email_codes WHERE expires_at < now() - interval '1 day'`,
 	}
 	for _, q := range stmts {
 		if _, err := s.db.ExecContext(ctx, q); err != nil {

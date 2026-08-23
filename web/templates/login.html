@@ -17,6 +17,8 @@
   {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
   {{if .PhoneError}}<p class="alert" role="alert">{{.PhoneError}}</p>{{end}}
   {{if and .PhoneNotice (not .PhoneError)}}<p class="notice">{{.PhoneNotice}}</p>{{end}}
+  {{if .EmailError}}<p class="alert" role="alert">{{.EmailError}}</p>{{end}}
+  {{if and .EmailNotice (not .EmailError)}}<p class="notice">{{.EmailNotice}}</p>{{end}}
 
   {{/* One box. What goes in it decides what the next step asks for, so the
        visitor never has to know which kind of account they have. */}}
@@ -89,6 +91,31 @@
 
   <p class="muted hint"><a href="/login{{if .Next}}?next={{.Next}}{{end}}">Use a different account</a></p>
 
+  {{/* Second step, address by code: the code that was just mailed. Reached only
+       by asking for one from the password step; the one box routes an address
+       to the password first. */}}
+  {{else if eq .Kind "email-code"}}
+  <p class="muted hint" dir="ltr">{{.Identifier}}</p>
+
+  {{if .CodeSent}}
+  <form method="post" action="/login/email/verify" class="form">
+    <input type="hidden" name="next" value="{{.Next}}">
+    <input type="hidden" name="email" value="{{.Identifier}}">
+    <label>
+      <span>The code sent to {{.Identifier}}</span>
+      <input type="text" name="code" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="8" required autofocus>
+    </label>
+    <button type="submit" class="primary">Sign in</button>
+  </form>
+  <form method="post" action="/login/email" class="form resend">
+    <input type="hidden" name="next" value="{{.Next}}">
+    <input type="hidden" name="email" value="{{.Identifier}}">
+    <button type="submit" class="ghost small">Send another code</button>
+  </form>
+  {{end}}
+
+  <p class="muted hint"><a href="/login{{if .Next}}?next={{.Next}}{{end}}">Use a different account</a></p>
+
   {{/* Second step, address or handle: the password. */}}
   {{else}}
   <p class="muted hint" dir="ltr">{{.Identifier}}</p>
@@ -105,6 +132,17 @@
 
   {{if and .AllowRegistration (eq .Kind "email")}}
   <p class="muted hint">If no Nabu account uses this address yet, the password you type creates one.</p>
+  {{end}}
+
+  {{if and .Mail (eq .Kind "email")}}
+  {{/* The password is not the only proof an address can give. Offered only
+       where a relay is configured — a button that cannot send a code would
+       report one as sent. */}}
+  <form method="post" action="/login/email" class="form resend">
+    <input type="hidden" name="next" value="{{.Next}}">
+    <input type="hidden" name="email" value="{{.Identifier}}">
+    <button type="submit" class="ghost small">Email me a sign-in code instead</button>
+  </form>
   {{end}}
 
   <p class="muted hint"><a href="/login{{if .Next}}?next={{.Next}}{{end}}">Use a different account</a></p>

@@ -26,10 +26,11 @@ import (
 
 func main() {
 	configPath := flag.String("config", envOr("NABUAUTH_CONFIG", "apps.yaml"), "path to the YAML config file")
-	// There is no email-based password reset: this deployment has no outbound
-	// mail, so a reset link would be a flow that can never complete. An operator
-	// with shell access recovers an account instead — which is the same trust
-	// boundary, since that operator can already read the database.
+	// Password reset stays operator-side even where outbound mail is configured:
+	// a mailed code signs somebody in, but a reset link is a different flow, and
+	// one this form still does not have. An operator with shell access recovers
+	// an account instead — which is the same trust boundary, since that operator
+	// can already read the database.
 	resetEmail := flag.String("reset-password", "", "set a new password for this account, print it, and exit")
 	createEmail := flag.String("create-user", "", "create an account with a generated password, print it, and exit")
 	createName := flag.String("name", "", "display name for -create-user")
@@ -104,6 +105,10 @@ func main() {
 		log.Warn("an SMS gateway URL is configured but its key variable is empty; phone sign-in will not be offered",
 			"key_env", cfg.Sms.KeyEnv)
 	}
+	// Same for mail: a host with no sender address the relay would accept.
+	if cfg.Mail.Host != "" && !cfg.Mail.Configured() {
+		log.Warn("an SMTP host is configured but there is no address to send from; email sign-in codes will not be offered")
+	}
 
 	log.Info("nabuauth starting",
 		"port", cfg.Server.Port,
@@ -112,6 +117,7 @@ func main() {
 		"apps", appIDs,
 		"registration_open", cfg.Server.AllowRegistration,
 		"phone_sign_in", cfg.Sms.Configured(),
+		"email_sign_in", cfg.Mail.Configured(),
 	)
 
 	// Expired codes, tokens and sessions accumulate forever otherwise; the sweep
