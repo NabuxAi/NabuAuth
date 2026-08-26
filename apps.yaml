@@ -75,6 +75,9 @@ apps:
     badge: Active
     redirect_uris:
       - https://gate.nabuxai.com/admin/api/nabu/callback
+      - https://gate.nabuxai.com/api/nabu/callback
+      - http://localhost:8080/api/nabu/callback
+      - http://localhost:8080/admin/api/nabu/callback
     # NabuGate also meters usage, so it is the one app that may charge a wallet.
     scopes: [openid, profile, email, wallet, wallet.write, offline]
     secret_env: NABUAUTH_SECRET_NABUGATE
