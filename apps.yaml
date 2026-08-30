@@ -194,6 +194,22 @@ apps:
     scopes: [openid, profile, email, offline]
     secret_env: NABUAUTH_SECRET_NABUCRM
 
+  - id: imagen
+    name: Imagen Studio
+    description: Brand image and asset studio
+    icon: sparkles
+    url: https://imagen.nabuxai.com
+    badge: New
+    redirect_uris:
+      # The API owns the OAuth flow and nginx proxies /auth to it, so the
+      # browser returns to the public web host, not to the API's own hostname.
+      # Path confirmed from the service's OpenAPI: /auth/callback/{provider}.
+      - https://imagen.nabuxai.com/auth/callback/nabu
+    # No wallet: its model spend is metered by NabuGate against its own project
+    # token, so no user wallet is involved.
+    scopes: [openid, profile, email, offline]
+    secret_env: NABUAUTH_SECRET_IMAGEN
+
 # Not yet registered, because they have no sign-in callback to register:
 #
 #   nabusu       — no account system at all; it is a local companion talking to

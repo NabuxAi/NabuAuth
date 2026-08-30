@@ -16,6 +16,7 @@ registered in `apps.yaml`. That list, and nothing else, is what works today:
 - NabuPilot
 - NabuHub
 - NabuCRM
+- Imagen Studio
 <!-- registered-apps:end -->
 
 The markers are not decoration: a test reads the list between them and compares
