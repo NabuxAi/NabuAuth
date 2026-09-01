@@ -15,6 +15,12 @@ services:
       NABUAUTH_SECRET_NABUGEN: ${NABUAUTH_SECRET_NABUGEN}
       NABUAUTH_SECRET_NABUVOICE: ${NABUAUTH_SECRET_NABUVOICE}
       NABUAUTH_SECRET_NABUWRITE: ${NABUAUTH_SECRET_NABUWRITE}
+      NABUAUTH_SECRET_REELMIND: ${NABUAUTH_SECRET_REELMIND}
+      NABUAUTH_SECRET_NABUCHAT: ${NABUAUTH_SECRET_NABUCHAT}
+      NABUAUTH_SECRET_NABUHUB: ${NABUAUTH_SECRET_NABUHUB}
+      NABUAUTH_SECRET_NABUCRM: ${NABUAUTH_SECRET_NABUCRM}
+      NABUAUTH_SECRET_RASAD: ${NABUAUTH_SECRET_RASAD}
+      NABUAUTH_SECRET_IMAGEN: ${NABUAUTH_SECRET_IMAGEN}
       # The SMS gateway that carries one-time codes. Both are needed: without
       # them the phone field is simply not offered, which is the intended
       # behaviour for a deployment that has no gateway — but a deployment that

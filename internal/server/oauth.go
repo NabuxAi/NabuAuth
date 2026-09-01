@@ -185,6 +185,16 @@ func (s *Server) parseAuthRequest(w http.ResponseWriter, r *http.Request, q url.
 		s.redirectError(w, r, req, "invalid_request", "public clients must use code_challenge_method=S256")
 		return authRequest{}, false
 	}
+	// A confidential client is trusted with its secret, not with every redirect
+	// it registers. A code sent to a custom scheme or to loopback can be picked
+	// up by another app on the same device, which then forwards it to the real
+	// backend and gets a session; the secret never entered into it. Binding the
+	// code to a verifier only the requesting app holds is the one thing that
+	// makes such a redirect safe, so it is required there regardless of client.
+	if store.RedirectIsInterceptable(req.RedirectURI) && (req.CodeChallenge == "" || req.ChallengeMethod != "S256") {
+		s.redirectError(w, r, req, "invalid_request", "code_challenge with code_challenge_method=S256 is required for this redirect_uri")
+		return authRequest{}, false
+	}
 	return req, true
 }
 

@@ -16,6 +16,7 @@ registered in `apps.yaml`. That list, and nothing else, is what works today:
 - NabuPilot
 - NabuHub
 - NabuCRM
+- RASAD GCC
 - Imagen Studio
 <!-- registered-apps:end -->
 

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -426,6 +427,23 @@ func (c Client) AllowsRedirect(uri string) bool {
 		}
 	}
 	return false
+}
+
+// RedirectIsInterceptable reports whether a redirect URI can be claimed by
+// something other than the registered app. An https URL is bound to a
+// hostname the app proved it controls. A custom scheme (`rasad://oauth`) is
+// registered by whichever app on the device asks first, and loopback http is
+// answered by whichever process is listening on that port — so on either the
+// authorization code can be read by a bystander, and the client secret held
+// somewhere else does not help, because the bystander hands the same code to
+// the same backend. PKCE is what closes that, so the server insists on it for
+// these redirects whether or not the client is confidential.
+func RedirectIsInterceptable(uri string) bool {
+	u, err := url.Parse(uri)
+	if err != nil {
+		return true
+	}
+	return !strings.EqualFold(u.Scheme, "https")
 }
 
 // AllowsScope reports whether the client may request a scope. An empty scope

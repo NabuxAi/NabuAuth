@@ -18,6 +18,20 @@ The apps registered today, and where each one really listens:
 | NabuVoice | `https://voice.nabuxai.com/auth/nabu/callback` |
 | NabuWrite | `https://write.nabuxai.com/api/auth/nabu/callback` |
 | NabuGate console | `https://gate.nabuxai.com/admin/api/nabu/callback` |
+| ReelMind | `https://reelmind.nabuxai.com/panel/auth/callback` |
+| NabuPilot (public client) | `https://pilot.nabuxai.com/virtual-office/`, `https://pilot.nabuxai.com/webapp/` |
+| NabuChat | `https://chat.nabuxai.com/api/auth/callback/nabuauth` |
+| NabuHub | `https://hub.nabuxai.com/auth/callback` |
+| NabuCRM | `https://crm.nabuxai.com/auth/nabu/callback` |
+| RASAD GCC | `https://rasad.nabuxai.com/api/auth/nabu/callback`, plus `rasad://oauth` for the native app |
+| Imagen Studio | `https://imagen.nabuxai.com/auth/callback/nabu` |
+
+A redirect the app cannot own — a custom scheme like `rasad://oauth`, or
+`http://localhost:…` for a developer's machine — may be registered, but the
+server will only send a code to it when the request carries
+`code_challenge_method=S256`. The client secret does not protect that path:
+another app on the same device can claim the scheme, receive the code and hand
+it to the real backend. PKCE is what stops it, so it is required there.
 
 NabuWrite and the NabuGate console differ from the rest because their APIs are
 mounted under `/api` and `/admin`. Getting this wrong does not fail quietly: the

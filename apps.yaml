@@ -194,6 +194,22 @@ apps:
     scopes: [openid, profile, email, offline]
     secret_env: NABUAUTH_SECRET_NABUCRM
 
+  - id: rasad
+    name: RASAD GCC
+    description: GCC tender and commercial opportunity intelligence
+    icon: chart-bar-square
+    url: https://rasad.nabuxai.com
+    badge: New
+    redirect_uris:
+      # The web panel completes the server-side flow through Next.js. The
+      # native app receives only the authorization code and sends it to the
+      # RASAD API for the confidential token exchange.
+      - https://rasad.nabuxai.com/api/auth/nabu/callback
+      - rasad://oauth
+      - http://localhost:3000/api/auth/nabu/callback
+    scopes: [openid, profile, email, offline]
+    secret_env: NABUAUTH_SECRET_RASAD
+
   - id: imagen
     name: Imagen Studio
     description: Brand image and asset studio
