@@ -15,6 +15,7 @@ import (
 
 	"nabuauth/internal/config"
 	"nabuauth/internal/mail"
+	"nabuauth/internal/mcp"
 	"nabuauth/internal/sms"
 	"nabuauth/internal/store"
 	"nabuauth/internal/tokens"
@@ -56,7 +57,20 @@ type Server struct {
 	mailTTL    time.Duration
 	mailResend time.Duration
 
+	// mcp is the Model Context Protocol endpoint. nil, or configured without a
+	// token, means the route is never mounted — this service holds every
+	// identity in the estate and the wallet each of them spends from, and an
+	// open MCP endpoint on it would be all of them.
+	mcp *mcp.Server
+
 	throttle *throttle
+}
+
+// WithMCP attaches the MCP endpoint.
+func (s *Server) WithMCP(m *mcp.Server) *Server {
+	s.mcp = m
+
+	return s
 }
 
 // New builds the server.
@@ -159,6 +173,30 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(web.Static()))))
+
+	// The MCP endpoint. Every method is routed to the one handler rather than
+	// just POST, so a client that opens the stream with GET or tears a session
+	// down with DELETE is told the endpoint is POST-only instead of being
+	// handed the account page by the "GET /" route below it.
+	//
+	// Registered method by method rather than on the bare path the sibling
+	// services use: this mux already has a "GET /" pattern, and net/http
+	// *panics at registration* on a bare "/mcp" beside it — "matches more
+	// methods than GET /, but has a more specific path pattern". A bare mount
+	// here would take sign-in down at boot, so the method list is spelled out
+	// and the handler still does its own check, which is what sets Allow: POST.
+	//
+	// Inside the mux, so MCP inherits recover, limitBody and cors. The second
+	// body cap is harmless. cors answers OPTIONS /mcp before the handler's own
+	// method check ever runs; that is correct and deliberately not "fixed".
+	if s.mcp != nil && s.mcp.Enabled() {
+		for _, method := range []string{
+			http.MethodPost, http.MethodGet, http.MethodDelete,
+			http.MethodPut, http.MethodPatch, http.MethodHead, http.MethodOptions,
+		} {
+			mux.Handle(method+" "+s.mcp.Path(), s.mcp.Handler())
+		}
+	}
 
 	return s.recover(s.limitBody(s.cors(mux)))
 }

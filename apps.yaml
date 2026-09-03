@@ -262,3 +262,15 @@ login_methods:
     client_id: ${GOOGLE_CLIENT_ID}
     scopes: [openid, email, profile]
     secret_env: NABUAUTH_PROVIDER_SECRET_GOOGLE
+
+# The MCP endpoint. Read-only, and it holds no secrets: the token arrives in
+# the named variable, and no tool ever returns a credential.
+#
+# NABUAUTH_MCP_TOKEN is a secret of its own — not an app's client secret, not
+# the SMS key. It reads across every account in the estate and is handed to an
+# AI client that may run on somebody's laptop, so it has to be revocable on its
+# own. Unset means /mcp is never mounted and 404s; the boot log says so.
+mcp:
+  enabled: true
+  path: /mcp
+  token_env: NABUAUTH_MCP_TOKEN
