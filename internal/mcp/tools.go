@@ -37,7 +37,7 @@ const Version = "1.0.0"
 type Accounts interface {
 	ListUsers(ctx context.Context, limit int) ([]store.User, error)
 	UserByID(ctx context.Context, id int64) (store.User, error)
-	WalletFor(ctx context.Context, userID int64) (store.Wallet, error)
+	ReadWalletFor(ctx context.Context, userID int64) (store.Wallet, error)
 	Transactions(ctx context.Context, userID int64, limit int) ([]store.Transaction, error)
 }
 
@@ -210,8 +210,15 @@ func Register(s *Server, cfg *config.Config, accounts Accounts) {
 				return nil, err
 			}
 
-			wallet, err := accounts.WalletFor(ctx, id)
+			// ReadWalletFor, never WalletFor: the latter is an upsert, so a
+			// "read" through it would create a wallet row for whatever id the
+			// caller passed and touch updated_at on every existing one.
+			wallet, err := accounts.ReadWalletFor(ctx, id)
 			if err != nil {
+				if isMissing(err) {
+					return nil, Failf("account %d has no wallet yet", id)
+				}
+
 				return nil, err
 			}
 

@@ -76,7 +76,7 @@ func (f *fakeAccounts) UserByID(_ context.Context, id int64) (store.User, error)
 	return store.User{}, store.ErrNotFound
 }
 
-func (f *fakeAccounts) WalletFor(_ context.Context, userID int64) (store.Wallet, error) {
+func (f *fakeAccounts) ReadWalletFor(_ context.Context, userID int64) (store.Wallet, error) {
 	w, ok := f.wallets[userID]
 	if !ok {
 		return store.Wallet{}, store.ErrNotFound
@@ -171,6 +171,32 @@ func newTestServer(t *testing.T) http.Handler {
 
 	srv := New("nabuauth", Version, cfg.MCP.Path, testToken, slog.New(slog.NewTextHandler(discard{}, nil)))
 	Register(srv, cfg, accounts)
+
+	return srv.Handler()
+}
+
+// newTestServerTracking is newTestServer with the accounts port wrapped so a
+// write can be observed. Kept beside it so the two cannot drift.
+func newTestServerTracking(t *testing.T, tracker *writeTrackingAccounts) http.Handler {
+	t.Helper()
+
+	t.Setenv("NABUAUTH_SECRET_TESTAPP", theAppSecret)
+	t.Setenv("NABUAUTH_PROVIDER_SECRET_GOOGLE", theProviderSecret)
+
+	cfg := &config.Config{
+		Server: config.Server{Port: 8099, Issuer: "https://auth.nabuxai.test"},
+		Scopes: config.DefaultScopes,
+	}
+
+	created := time.Date(2026, 1, 1, 9, 30, 0, 0, time.UTC)
+	tracker.fakeAccounts = &fakeAccounts{
+		users:   []store.User{{ID: 7, Name: "Hussein", Email: "h@nabuxai.test", IsActive: true, CreatedAt: created}},
+		wallets: map[int64]store.Wallet{7: {ID: 1, UserID: 7, BalanceCents: 12_500, Currency: "USD"}},
+		ledger:  map[int64][]store.Transaction{},
+	}
+
+	srv := New("nabuauth", Version, cfg.MCP.Path, testToken, slog.New(slog.NewTextHandler(discard{}, nil)))
+	Register(srv, cfg, tracker)
 
 	return srv.Handler()
 }
@@ -763,5 +789,101 @@ func TestAnUnexpectedToolErrorIsReplacedRatherThanForwarded(t *testing.T) {
 	}
 	if result.Content[0].Text != "this tool failed; the reason is in the service log" {
 		t.Errorf("message = %q, want the fixed replacement", result.Content[0].Text)
+	}
+}
+
+// TestNoToolWritesThroughTheAccountsPort is the property TestNoToolIsAWrite was
+// named after but did not check: that one only asserted on tool *names*.
+//
+// The concrete bug it would have caught: nabuauth_wallet_get called
+// store.WalletFor, which is `INSERT INTO wallets ... ON CONFLICT DO UPDATE`. A
+// tool advertised as read-only created a wallet row for any id it was handed and
+// touched updated_at on every existing one — on the service that holds the
+// shared wallet.
+//
+// So this drives every tool through a port that fails the test the moment a
+// write method is called, rather than trusting the naming.
+func TestNoToolWritesThroughTheAccountsPort(t *testing.T) {
+	// The shared harness already seeds a user with a wallet and a ledger; this
+	// wraps its account port so any write shows up.
+	writes := &writeTrackingAccounts{}
+	h := newTestServerTracking(t, writes)
+
+	var listed struct {
+		Result struct {
+			Tools []struct {
+				Name string `json:"name"`
+			} `json:"tools"`
+		} `json:"result"`
+	}
+	body := post(t, h, testToken, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`).Body.Bytes()
+	if err := json.Unmarshal(body, &listed); err != nil {
+		t.Fatalf("tools/list did not decode: %v", err)
+	}
+	if len(listed.Result.Tools) == 0 {
+		t.Fatal("tools/list returned nothing, so this test would pass vacuously")
+	}
+
+	// Prove the detector fires before trusting that it stayed silent. Without
+	// this, a rename of the tracked method would turn the whole test green and
+	// mean nothing.
+	if _, _ = writes.WalletFor(context.Background(), 7); writes.wrote == "" {
+		t.Fatal("the write tracker did not fire on a direct call, so its silence below proves nothing")
+	}
+	writes.wrote = ""
+
+	for _, tool := range listed.Result.Tools {
+		// Arguments every tool tolerates: unknown keys are ignored, and the
+		// ones that need a user_id get a real one.
+		call := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` +
+			tool.Name + `","arguments":{"user_id":"1","id":"1","limit":5}}}`
+		post(t, h, testToken, call)
+
+		if writes.wrote != "" {
+			t.Fatalf("%s called %s, which writes — a read-only tool must not", tool.Name, writes.wrote)
+		}
+	}
+}
+
+// writeTrackingAccounts records any call to a method that mutates.
+type writeTrackingAccounts struct {
+	*fakeAccounts
+	wrote string
+}
+
+// WalletFor is the upsert. Reaching it from a tool is the failure.
+func (w *writeTrackingAccounts) WalletFor(ctx context.Context, userID int64) (store.Wallet, error) {
+	w.wrote = "WalletFor (INSERT ... ON CONFLICT DO UPDATE)"
+	return store.Wallet{}, nil
+}
+
+// TestOnlyTheBearerSchemeAuthenticates pins what the comment on authorised
+// claims. TrimPrefix is a no-op when the prefix is absent, so the earlier
+// implementation accepted a bare token as a second valid shape — a second place
+// for it to leak from, which is the thing the comment rules out.
+func TestOnlyTheBearerSchemeAuthenticates(t *testing.T) {
+	h := newTestServer(t)
+	body := `{"jsonrpc":"2.0","id":1,"method":"ping"}`
+
+	for _, header := range []string{
+		testToken,             // no scheme at all
+		"bearer " + testToken, // lowercase scheme
+		"Basic " + testToken,  // a different scheme
+		"Token " + testToken,
+	} {
+		req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+		req.Header.Set("Authorization", header)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("Authorization: %q returned %d, want 401", header, rec.Code)
+		}
+	}
+
+	// And the correct shape still works, so this is not passing by rejecting all.
+	if got := post(t, h, testToken, body).Code; got != http.StatusOK {
+		t.Fatalf("a correct Bearer header returned %d, want 200", got)
 	}
 }

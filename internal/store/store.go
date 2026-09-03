@@ -817,6 +817,30 @@ func (s *Store) WalletFor(ctx context.Context, userID int64) (Wallet, error) {
 	return w, nil
 }
 
+// ReadWalletFor returns a user's wallet without creating one.
+//
+// WalletFor above is an upsert — it exists so that an account predating the
+// wallet table gets a row the first time money moves. That makes it wrong for a
+// reader: asking "what is this user's balance?" would create the row, and asking
+// about an id that does not exist would create one for it too.
+//
+// Returns ErrNotFound when the user has no wallet yet, which a reader should
+// report as "no wallet" rather than as a zero balance the caller believes in.
+func (s *Store) ReadWalletFor(ctx context.Context, userID int64) (Wallet, error) {
+	var w Wallet
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, user_id, balance_cents, currency
+		FROM wallets WHERE user_id = $1`, userID).
+		Scan(&w.ID, &w.UserID, &w.BalanceCents, &w.Currency)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Wallet{}, ErrNotFound
+	}
+	if err != nil {
+		return Wallet{}, err
+	}
+	return w, nil
+}
+
 // Adjust moves money in or out of a wallet and writes the ledger entry, under a
 // row lock so two concurrent debits cannot both read the same balance.
 //
