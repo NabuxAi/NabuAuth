@@ -33,6 +33,22 @@ type Config struct {
 	// variables, and the option is not offered at all until the deployment has
 	// a relay.
 	Mail Mail `yaml:"mail"`
+
+	// MCP is the Model Context Protocol endpoint.
+	MCP MCP `yaml:"mcp"`
+}
+
+// MCP is the Model Context Protocol endpoint: a read-only view of this
+// service for AI clients, on its own path behind its own token.
+//
+// TokenEnv names the variable the token arrives in rather than holding it,
+// exactly like every other credential in this file, so the config stays
+// committable. An unset variable disables the endpoint — the route is not
+// mounted at all. There is no unauthenticated mode.
+type MCP struct {
+	Enabled  bool   `yaml:"enabled"`
+	Path     string `yaml:"path"`
+	TokenEnv string `yaml:"token_env"`
 }
 
 // Sms points at the NabuSms gateway and says how to address it.

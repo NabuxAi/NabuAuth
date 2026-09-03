@@ -19,6 +19,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"nabuauth/internal/config"
+	"nabuauth/internal/mcp"
 	"nabuauth/internal/server"
 	"nabuauth/internal/store"
 	"nabuauth/internal/tokens"
@@ -88,6 +89,33 @@ func main() {
 		log.Error("could not start server", "error", err)
 		os.Exit(1)
 	}
+
+	// The MCP endpoint: a read-only view of accounts, apps and wallets for an
+	// AI client, on its own path behind its own token.
+	//
+	// Disabled without a token, and said so out loud — a 404 on /mcp with
+	// nothing in the log is a support conversation. Refusing to boot is
+	// deliberately not the behaviour: an absent MCP token must not take
+	// sign-in for the whole estate down.
+	mcpToken := ""
+	if cfg.MCP.Enabled {
+		tokenEnv := cfg.MCP.TokenEnv
+		if tokenEnv == "" {
+			tokenEnv = "NABUAUTH_MCP_TOKEN"
+		}
+
+		// Read here rather than through the ${VAR} expansion apps.yaml uses, so
+		// all four services take their MCP token by one mechanism.
+		mcpToken = os.Getenv(tokenEnv)
+		if mcpToken == "" {
+			log.Warn("mcp disabled: its token variable is unset", "var", tokenEnv)
+		}
+	}
+
+	mcpServer := mcp.New("nabuauth", mcp.Version, cfg.MCP.Path, mcpToken, log)
+	mcp.Register(mcpServer, cfg, st)
+	srv = srv.WithMCP(mcpServer)
+
 	if err := srv.SyncApps(ctx); err != nil {
 		log.Error("could not register ecosystem apps", "error", err)
 		os.Exit(1)
@@ -118,6 +146,7 @@ func main() {
 		"registration_open", cfg.Server.AllowRegistration,
 		"phone_sign_in", cfg.Sms.Configured(),
 		"email_sign_in", cfg.Mail.Configured(),
+		"mcp", mcpServer.Enabled(),
 	)
 
 	// Expired codes, tokens and sessions accumulate forever otherwise; the sweep
