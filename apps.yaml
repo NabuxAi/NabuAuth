@@ -183,6 +183,21 @@ apps:
     scopes: [openid, profile, email, wallet, offline]
     secret_env: NABUAUTH_SECRET_NABUHUB
 
+  # The SMS gateway's operator console. It holds every SMS panel credential the
+  # organisation owns, so who may open it is decided by NabuAuth's own admin
+  # flag (or an address in NABUSMS_ADMIN_EMAILS) rather than by having reached
+  # the sign-in page. No wallet scope: it spends SMS credit, not a balance here.
+  - id: nabusms
+    name: NabuSms
+    description: The organisation's SMS gateway
+    icon: chat-bubble-oval-left-ellipsis
+    url: https://sms.nabuxai.com/panel/
+    hidden: true
+    redirect_uris:
+      - https://sms.nabuxai.com/panel/auth/callback
+    scopes: [openid, profile, email]
+    secret_env: NABUAUTH_SECRET_NABUSMS
+
   - id: nabucrm
     name: NabuCRM
     description: Customers, deals and follow-ups
