@@ -151,6 +151,24 @@ Environment:
 | `NABUAUTH_PROVIDER_SECRET_*` | One client secret per external sign-in method, named by its `secret_env` |
 | `NABUAUTH_SMS_URL` | NabuSms base URL; unset means phone sign-in is not offered |
 | `NABUAUTH_SMS_KEY` | NabuSms bearer key, named by `sms.key_env` |
+| `NABUGATE_SECRET` | Shared secret NabuCRM verifies intake reports with; must equal NabuCRM's. Unset: reports queue and wait |
+| `CRM_INTAKE_URL` | NabuCRM intake endpoint, default `https://crm.nabuxai.com/api/v1/crm/intake` |
+| `CRM_INTAKE_ENABLED` | `false` stops queueing and sending signup reports; default `true` |
+
+### NabuCRM intake
+
+Every account NabuAuth creates — sign-in form, provider, phone code, admin
+page, `-create-user` — is reported to NabuCRM as a `signup` (contract: NabuCRM's
+`docs/crm-intake.md`), except administrators, who are staff. The report is
+written to `crm_outbox` in the transaction that creates the account and sent by
+a background loop every 30 seconds, signed with `NABUGATE_SECRET` as app
+`nabuauth`. 2xx is done; 5xx, 429 and network errors are retried (1 minute
+doubling to 6 hours, 24 attempts); any other 4xx is marked failed.
+
+```bash
+nabuauth -crm-backfill         # report accounts made before this existed (idempotent)
+nabuauth -crm-requeue-failed   # retry refused reports once the cause is fixed
+```
 
 The RSA signing key is generated on first boot and stored in the database, so a
 fresh deployment issues valid tokens with no key ceremony and every replica signs

@@ -174,3 +174,25 @@ CREATE TABLE IF NOT EXISTS signing_keys (
     is_active   BOOLEAN     NOT NULL DEFAULT TRUE,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Reports of new accounts on their way to NabuCRM's intake door
+-- (internal/crmintake, NabuCRM docs/crm-intake.md). Written in the transaction
+-- that creates the account and drained by a background sender, so NabuCRM
+-- being down delays a report instead of losing it or failing the sign-in.
+-- event_id is derived from the account, so the live hook and the backfill can
+-- never queue the same account twice. payload is TEXT, not JSONB: it is signed
+-- byte for byte, and JSONB would reorder it.
+CREATE TABLE IF NOT EXISTS crm_outbox (
+    id              BIGSERIAL PRIMARY KEY,
+    event_id        TEXT        NOT NULL UNIQUE,
+    event           TEXT        NOT NULL,
+    payload         TEXT        NOT NULL,
+    status          TEXT        NOT NULL DEFAULT 'pending',
+    attempts        INTEGER     NOT NULL DEFAULT 0,
+    next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_error      TEXT        NOT NULL DEFAULT '',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS crm_outbox_due_idx ON crm_outbox (next_attempt_at) WHERE status = 'pending';
