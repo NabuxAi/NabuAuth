@@ -15,6 +15,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib" // database/sql driver "pgx"
+
+	"nabuauth/internal/crmintake"
 )
 
 //go:embed schema.sql
@@ -40,6 +42,11 @@ var ErrReplayed = errors.New("refresh token replayed")
 // Store is the database handle plus the queries NabuAuth needs.
 type Store struct {
 	db *sql.DB
+
+	// reportSignups queues a NabuCRM signup report with every account
+	// CreateUser makes; onReportError hears one that could not be queued.
+	reportSignups bool
+	onReportError func(error)
 }
 
 // Open connects to Postgres and applies the schema.
@@ -169,6 +176,7 @@ func (s *Store) CreateUser(ctx context.Context, name, email, phone, passwordHash
 	if _, err := tx.ExecContext(ctx, `INSERT INTO wallets (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING`, u.ID); err != nil {
 		return User{}, err
 	}
+	s.queueSignup(ctx, tx, u)
 	return u, tx.Commit()
 }
 
@@ -999,6 +1007,7 @@ func (s *Store) Cleanup(ctx context.Context) error {
 		`DELETE FROM sessions WHERE expires_at < now()`,
 		`DELETE FROM phone_codes WHERE expires_at < now() - interval '1 day'`,
 		`DELETE FROM email_codes WHERE expires_at < now() - interval '1 day'`,
+		`DELETE FROM crm_outbox WHERE status = 'done' AND updated_at < now() - interval '30 days'`,
 	}
 	for _, q := range stmts {
 		if _, err := s.db.ExecContext(ctx, q); err != nil {
@@ -1035,4 +1044,148 @@ func (s *Store) ListUsers(ctx context.Context, limit int) ([]User, error) {
 func (s *Store) SetActive(ctx context.Context, id int64, active bool) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE users SET is_active = $2, updated_at = now() WHERE id = $1`, id, active)
 	return err
+}
+
+// ------------------------------------------------------ NabuCRM intake outbox
+
+// ReportSignups turns the NabuCRM signup report on or off. When on, every
+// account CreateUser makes — except an administrator, who is staff rather than
+// a customer — queues one report in the transaction that creates it. onError
+// hears a report that could not be queued; the account is created regardless.
+func (s *Store) ReportSignups(on bool, onError func(error)) {
+	s.reportSignups = on
+	s.onReportError = onError
+}
+
+const insertOutbox = `INSERT INTO crm_outbox (event_id, event, payload) VALUES ($1, $2, $3) ON CONFLICT (event_id) DO NOTHING`
+
+// queueSignup writes the account's signup report inside the creating
+// transaction, under a savepoint: in Postgres one failed statement aborts the
+// whole transaction, and a broken outbox must not take sign-up down with it.
+func (s *Store) queueSignup(ctx context.Context, tx *sql.Tx, u User) {
+	if !s.reportSignups || u.IsAdmin {
+		return
+	}
+	err := func() error {
+		payload, err := json.Marshal(crmintake.Signup(u.ID, u.Name, u.Email, u.Phone, u.CreatedAt))
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `SAVEPOINT crm_outbox`); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, insertOutbox, crmintake.SignupEventID(u.ID), "signup", string(payload)); err != nil {
+			if _, rbErr := tx.ExecContext(ctx, `ROLLBACK TO SAVEPOINT crm_outbox`); rbErr != nil {
+				return errors.Join(err, rbErr)
+			}
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `RELEASE SAVEPOINT crm_outbox`)
+		return err
+	}()
+	if err != nil && s.onReportError != nil {
+		s.onReportError(err)
+	}
+}
+
+// QueueSignupBackfill queues a signup report for every existing account that
+// is not an administrator, dated to when the account was made. Safe to run
+// again: event ids come from the account, so a second run queues nothing and
+// an account the live hook already queued is skipped.
+func (s *Store) QueueSignupBackfill(ctx context.Context) (queued, total int, err error) {
+	var lastID int64
+	for {
+		rows, err := s.db.QueryContext(ctx,
+			`SELECT `+userColumns+` FROM users WHERE is_admin = FALSE AND id > $1 ORDER BY id LIMIT 500`, lastID)
+		if err != nil {
+			return queued, total, err
+		}
+		var page []User
+		for rows.Next() {
+			u, err := scanUser(rows)
+			if err != nil {
+				rows.Close()
+				return queued, total, err
+			}
+			page = append(page, u)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return queued, total, err
+		}
+		if len(page) == 0 {
+			return queued, total, nil
+		}
+		for _, u := range page {
+			payload, err := json.Marshal(crmintake.Signup(u.ID, u.Name, u.Email, u.Phone, u.CreatedAt))
+			if err != nil {
+				return queued, total, err
+			}
+			res, err := s.db.ExecContext(ctx, insertOutbox, crmintake.SignupEventID(u.ID), "signup", string(payload))
+			if err != nil {
+				return queued, total, err
+			}
+			if n, _ := res.RowsAffected(); n == 1 {
+				queued++
+			}
+			total++
+			lastID = u.ID
+		}
+	}
+}
+
+// ClaimCRMEvents hands out due reports, each pushed out of reach for lease so
+// an overlapping pass or a second replica cannot send it twice. SKIP LOCKED
+// lets replicas claim side by side without waiting on each other.
+func (s *Store) ClaimCRMEvents(ctx context.Context, limit int, lease time.Duration) ([]crmintake.Row, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		UPDATE crm_outbox SET next_attempt_at = now() + make_interval(secs => $2), updated_at = now()
+		WHERE id IN (
+			SELECT id FROM crm_outbox
+			WHERE status = 'pending' AND next_attempt_at <= now()
+			ORDER BY id LIMIT $1
+			FOR UPDATE SKIP LOCKED)
+		RETURNING id, event_id, payload, attempts`, limit, lease.Seconds())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []crmintake.Row
+	for rows.Next() {
+		var r crmintake.Row
+		var payload string
+		if err := rows.Scan(&r.ID, &r.EventID, &payload, &r.Attempts); err != nil {
+			return nil, err
+		}
+		r.Payload = []byte(payload)
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// RetryCRMEvent records a failed attempt and when to try again.
+func (s *Store) RetryCRMEvent(ctx context.Context, id int64, attempts int, next time.Time, lastErr string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE crm_outbox SET attempts = $2, next_attempt_at = $3, last_error = $4, updated_at = now() WHERE id = $1`,
+		id, attempts, next, lastErr)
+	return err
+}
+
+// FinishCRMEvent settles a report as done or failed.
+func (s *Store) FinishCRMEvent(ctx context.Context, id int64, status string, attempts int, lastErr string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE crm_outbox SET status = $2, attempts = $3, last_error = $4, updated_at = now() WHERE id = $1`,
+		id, status, attempts, lastErr)
+	return err
+}
+
+// RequeueFailedCRMEvents puts every refused report back in the queue, for once
+// the cause — usually a wrong NABUGATE_SECRET — has been fixed.
+func (s *Store) RequeueFailedCRMEvents(ctx context.Context) (int64, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE crm_outbox SET status = 'pending', attempts = 0, next_attempt_at = now(), updated_at = now() WHERE status = 'failed'`)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }

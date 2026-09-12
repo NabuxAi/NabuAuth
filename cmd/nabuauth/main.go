@@ -19,6 +19,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"nabuauth/internal/config"
+	"nabuauth/internal/crmintake"
 	"nabuauth/internal/mcp"
 	"nabuauth/internal/server"
 	"nabuauth/internal/store"
@@ -36,6 +37,10 @@ func main() {
 	createEmail := flag.String("create-user", "", "create an account with a generated password, print it, and exit")
 	createName := flag.String("name", "", "display name for -create-user")
 	createAdmin := flag.Bool("admin", false, "make the account created by -create-user an administrator")
+	// NabuCRM hears about every account made from now on. These two cover the
+	// accounts made before that, and reports NabuCRM refused.
+	crmBackfill := flag.Bool("crm-backfill", false, "queue a NabuCRM signup report for every existing account, print how many, and exit")
+	crmRequeue := flag.Bool("crm-requeue-failed", false, "put the reports NabuCRM refused back in the queue, print how many, and exit")
 	flag.Parse()
 
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -62,6 +67,14 @@ func main() {
 	}
 	defer st.Close()
 
+	// Every account created from here on — by the sign-in form, a provider,
+	// a phone code, the admin page or -create-user — is reported to NabuCRM's
+	// intake door, queued in the transaction that creates it.
+	crmIntake := envBool("CRM_INTAKE_ENABLED", true)
+	st.ReportSignups(crmIntake, func(err error) {
+		log.Warn("could not queue the NabuCRM signup report; the account was created anyway", "error", err)
+	})
+
 	if *createEmail != "" {
 		if err := createUser(ctx, st, *createEmail, *createName, *createAdmin); err != nil {
 			log.Error("could not create the account", "email", *createEmail, "error", err)
@@ -75,6 +88,27 @@ func main() {
 			log.Error("could not reset the password", "email", *resetEmail, "error", err)
 			os.Exit(1)
 		}
+		return
+	}
+
+	if *crmBackfill {
+		queued, total, err := st.QueueSignupBackfill(ctx)
+		if err != nil {
+			log.Error("could not queue the NabuCRM backfill", "error", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Queued %d new signup report(s) for %d account(s); the rest were already queued or sent.\n", queued, total)
+		fmt.Println("The running server sends them; with NABUGATE_SECRET unset they wait until it is set.")
+		return
+	}
+
+	if *crmRequeue {
+		n, err := st.RequeueFailedCRMEvents(ctx)
+		if err != nil {
+			log.Error("could not requeue refused NabuCRM reports", "error", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Put %d refused report(s) back in the queue.\n", n)
 		return
 	}
 
@@ -147,6 +181,7 @@ func main() {
 		"phone_sign_in", cfg.Sms.Configured(),
 		"email_sign_in", cfg.Mail.Configured(),
 		"mcp", mcpServer.Enabled(),
+		"crm_intake", crmIntake && os.Getenv("NABUGATE_SECRET") != "",
 	)
 
 	// Expired codes, tokens and sessions accumulate forever otherwise; the sweep
@@ -166,6 +201,19 @@ func main() {
 			}
 		}
 	}()
+
+	// Deliver the queued reports. Without NABUGATE_SECRET they wait and the
+	// sender says so once, rather than failing a sign-in or every tick.
+	if crmIntake {
+		sender := &crmintake.Sender{
+			Outbox: st,
+			URL:    envOr("CRM_INTAKE_URL", crmintake.DefaultURL),
+			Secret: os.Getenv("NABUGATE_SECRET"),
+			Client: &http.Client{Timeout: 15 * time.Second},
+			Log:    log,
+		}
+		go sender.Run(ctx, 30*time.Second)
+	}
 
 	httpServer := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Server.Port),
@@ -330,6 +378,17 @@ func databaseURL() string {
 func envOr(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return fallback
+}
+
+// envBool reads an on/off switch, keeping the fallback for anything else.
+func envBool(key string, fallback bool) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
 	}
 	return fallback
 }

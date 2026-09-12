@@ -28,6 +28,12 @@ services:
       # in production while it worked locally.
       NABUAUTH_SMS_URL: ${NABUAUTH_SMS_URL:-https://sms.nabuxai.com}
       NABUAUTH_SMS_KEY: ${NABUAUTH_SMS_KEY}
+      # NabuCRM's intake door: every new account is reported there as a person
+      # (NabuCRM docs/crm-intake.md). NABUGATE_SECRET must be the value NabuCRM
+      # holds; while it is empty, reports queue in crm_outbox and wait.
+      NABUGATE_SECRET: ${NABUGATE_SECRET}
+      CRM_INTAKE_URL: ${CRM_INTAKE_URL:-https://crm.nabuxai.com/api/v1/crm/intake}
+      CRM_INTAKE_ENABLED: ${CRM_INTAKE_ENABLED:-true}
     labels:
       - "coolify.managed=true"
       - "traefik.enable=true"
