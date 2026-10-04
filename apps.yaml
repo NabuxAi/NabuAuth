@@ -209,6 +209,19 @@ apps:
     scopes: [openid, profile, email, offline]
     secret_env: NABUAUTH_SECRET_NABUCRM
 
+  # Signs restaurant owners and the platform's staff in to its two panels. A NabuAuth
+  # account opens only the Nabusto account it was connected to from inside Nabusto: an
+  # email address here is not checked, so it never picks the account on its own.
+  - id: nabusto
+    name: Nabusto
+    description: Restaurant menus, orders and the till
+    icon: building-storefront
+    url: https://nabusto.nabuxai.com
+    redirect_uris:
+      - https://nabusto.nabuxai.com/auth/nabuauth/callback
+    scopes: [openid, profile, email]
+    secret_env: NABUAUTH_SECRET_NABUSTO
+
   - id: rasad
     name: RASAD GCC
     description: GCC tender and commercial opportunity intelligence
