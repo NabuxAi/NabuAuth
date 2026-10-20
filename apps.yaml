@@ -254,6 +254,17 @@ apps:
     scopes: [openid, profile, email, offline]
     secret_env: NABUAUTH_SECRET_IMAGEN
 
+  - id: naburent
+    name: Nabu Rent
+    description: Compare cars and prices from nearby rental agencies
+    icon: truck
+    url: https://rent.nabuxai.com
+    badge: New
+    redirect_uris:
+      - https://rent.nabuxai.com/auth/nabu/callback
+    scopes: [openid, profile, email]
+    secret_env: NABUAUTH_SECRET_NABURENT
+
 # Not yet registered, because they have no sign-in callback to register:
 #
 #   nabusu       — no account system at all; it is a local companion talking to

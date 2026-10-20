@@ -22,6 +22,7 @@ services:
       NABUAUTH_SECRET_NABUSTO: ${NABUAUTH_SECRET_NABUSTO}
       NABUAUTH_SECRET_RASAD: ${NABUAUTH_SECRET_RASAD}
       NABUAUTH_SECRET_IMAGEN: ${NABUAUTH_SECRET_IMAGEN}
+      NABUAUTH_SECRET_NABURENT: ${NABUAUTH_SECRET_NABURENT}
       # The SMS gateway that carries one-time codes. Both are needed: without
       # them the phone field is simply not offered, which is the intended
       # behaviour for a deployment that has no gateway — but a deployment that
