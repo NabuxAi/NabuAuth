@@ -206,6 +206,12 @@ apps:
     badge: New
     redirect_uris:
       - https://crm.nabuxai.com/auth/nabu/callback
+      # The Iran-hosted NabuCRM/NabuPay instance authenticates as this same
+      # client (issuer https://auth.nabuxai.ir). Redirects are exact-match, so
+      # both callbacks have to be listed or that deployment cannot finish
+      # sign-in. pay.nabuxai.ir is the same codebase. The .com callback stays.
+      - https://crm.nabuxai.ir/auth/nabu/callback
+      - https://pay.nabuxai.ir/auth/nabu/callback
     scopes: [openid, profile, email, offline]
     secret_env: NABUAUTH_SECRET_NABUCRM
 
