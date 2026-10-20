@@ -45,9 +45,55 @@ func TestShippedAppsAreConsistent(t *testing.T) {
 			if store.RedirectIsInterceptable(uri) {
 				continue
 			}
+			// nabucrm is one client for two deployments. The launcher URL stays
+			// on .com; the Iran NabuCRM and NabuPay hosts are the other place
+			// this same client is allowed to return.
+			if app.ID == "nabucrm" && iranNabuCRMRedirects[uri] {
+				continue
+			}
 			if app.URL != "" && !hasPrefix(uri, app.URL) {
 				t.Errorf("app %q: redirect %q is not on its own origin %q", app.ID, uri, app.URL)
 			}
+		}
+	}
+}
+
+// iranNabuCRMRedirects are the callbacks of the Iran-hosted NabuCRM/NabuPay
+// instance. They are not on the .com launcher origin, and they are listed on
+// purpose: the Iran deployment authenticates as client id nabucrm.
+var iranNabuCRMRedirects = map[string]bool{
+	"https://crm.nabuxai.ir/auth/nabu/callback": true,
+	"https://pay.nabuxai.ir/auth/nabu/callback": true,
+}
+
+// The .com callback has to stay, in the same place, when the Iran callbacks
+// are added. Dropping or reordering it would be a behavior change for the
+// existing deployment; an exact-match allow-list only grows by appending.
+func TestNabuCRMKeepsTheComCallbackAndAllowsIran(t *testing.T) {
+	t.Setenv("NABUAUTH_ISSUER", "https://auth.nabuxai.com")
+
+	cfg, err := Load("../../apps.yaml")
+	if err != nil {
+		t.Fatalf("load apps.yaml: %v", err)
+	}
+	var got []string
+	for _, app := range cfg.Apps {
+		if app.ID == "nabucrm" {
+			got = app.RedirectURIs
+			break
+		}
+	}
+	want := []string{
+		"https://crm.nabuxai.com/auth/nabu/callback",
+		"https://crm.nabuxai.ir/auth/nabu/callback",
+		"https://pay.nabuxai.ir/auth/nabu/callback",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("nabucrm redirect_uris = %q, want %q", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("nabucrm redirect_uris[%d] = %q, want %q", i, got[i], want[i])
 		}
 	}
 }
