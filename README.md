@@ -20,6 +20,7 @@ registered in `apps.yaml`. That list, and nothing else, is what works today:
 - NabuSms
 - RASAD GCC
 - Imagen Studio
+- Nabu Rent
 <!-- registered-apps:end -->
 
 The markers are not decoration: a test reads the list between them and compares
