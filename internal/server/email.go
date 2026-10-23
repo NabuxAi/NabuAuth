@@ -349,14 +349,14 @@ func (s *Server) userForEmail(r *http.Request, address string) (store.User, erro
 	if err != nil {
 		return store.User{}, err
 	}
-	return s.store.CreateUser(r.Context(), nameFromEmail(address), address, "", string(hash), count == 0)
+	return s.store.CreateUser(r.Context(), nameFromEmail(address), address, "", string(hash), count == 0, false)
 }
 
 // emailCodeUnavailable is what a deployment with no relay answers on either
 // email-code route: the same 404 an unconfigured external provider gets,
 // because a route that cannot send a code should not be reachable at all.
-func (s *Server) emailCodeUnavailable(w http.ResponseWriter, _ *http.Request) {
-	s.render(w, http.StatusNotFound, "error.html", map[string]any{
+func (s *Server) emailCodeUnavailable(w http.ResponseWriter, r *http.Request) {
+	s.render(w, r, http.StatusNotFound, "error.html", map[string]any{
 		"Title":   "Unknown sign-in method",
 		"Message": "Signing in with an email code is not available here.",
 	})

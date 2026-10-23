@@ -1,5 +1,5 @@
 {{define "head"}}<!doctype html>
-<html lang="en" dir="ltr">
+<html lang="{{.Lang}}" dir="{{.Dir}}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,13 +9,19 @@
 </head>
 <body>
 <div class="shell">
-  <a class="brand" href="/dashboard"><span class="brand-mark">N</span> Nabu<b>Auth</b></a>
+  <a class="brand" href="/dashboard" dir="ltr"><span class="brand-mark">N</span> Nabu<b>Auth</b></a>
 {{end}}
 
 {{define "foot"}}
   <footer class="foot">
-    <span>Nabu ecosystem single sign-on</span>
-    <a href="{{.Issuer}}/.well-known/openid-configuration">OpenID configuration</a>
+    <span>{{t $.Lang "Nabu ecosystem single sign-on"}}</span>
+    {{/* Each language is a link to this same page with ?lang=, which also
+         remembers the choice. Named in its own language, so somebody who cannot
+         read the current one can still find theirs. */}}
+    <nav class="langs" aria-label="{{t $.Lang "Language"}}">
+      {{range .LangLinks}}{{if .Current}}<b lang="{{.Code}}">{{.Name}}</b>{{else}}<a href="{{.URL}}" lang="{{.Code}}" hreflang="{{.Code}}">{{.Name}}</a>{{end}}{{end}}
+    </nav>
+    <a href="{{.Issuer}}/.well-known/openid-configuration">{{t $.Lang "OpenID configuration"}}</a>
   </footer>
 </div>
 </body>

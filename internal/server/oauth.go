@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"nabuauth/internal/config"
+	"nabuauth/internal/i18n"
 	"nabuauth/internal/store"
 	"nabuauth/internal/tokens"
 )
@@ -111,9 +112,9 @@ func (s *Server) parseAuthRequest(w http.ResponseWriter, r *http.Request, q url.
 	if err != nil {
 		// No redirect: an unknown client means we have no verified URI to send
 		// the user to, and bouncing to an attacker-supplied one is the bug.
-		s.render(w, http.StatusBadRequest, "error.html", map[string]any{
+		s.render(w, r, http.StatusBadRequest, "error.html", map[string]any{
 			"Title":   "Unknown application",
-			"Message": "No Nabu application is registered with the client id \"" + clientID + "\".",
+			"Message": i18n.T(i18n.Pick(r).Code, "No Nabu application is registered with the client id \"%s\".", clientID),
 		})
 		return authRequest{}, false
 	}
@@ -122,9 +123,9 @@ func (s *Server) parseAuthRequest(w http.ResponseWriter, r *http.Request, q url.
 		redirectURI = client.RedirectURIs[0]
 	}
 	if !client.AllowsRedirect(redirectURI) {
-		s.render(w, http.StatusBadRequest, "error.html", map[string]any{
+		s.render(w, r, http.StatusBadRequest, "error.html", map[string]any{
 			"Title":   "Redirect not allowed",
-			"Message": "\"" + redirectURI + "\" is not a registered redirect URI for " + client.Name + ".",
+			"Message": i18n.T(i18n.Pick(r).Code, "\"%s\" is not a registered redirect URI for %s.", redirectURI, client.Name),
 		})
 		return authRequest{}, false
 	}
@@ -232,8 +233,8 @@ func (s *Server) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.render(w, http.StatusOK, "consent.html", map[string]any{
-		"Title": "Authorize " + req.Client.Name,
+	s.render(w, r, http.StatusOK, "consent.html", map[string]any{
+		"Title": i18n.T(i18n.Pick(r).Code, "Authorize %s", req.Client.Name),
 		// Somebody whose account was made seconds ago has never seen this server
 		// before; without a word saying so, the approval screen reads as a
 		// stranger asking for permission to something they did not sign up for.
@@ -260,7 +261,7 @@ func (s *Server) handleAuthorizeDecision(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if !s.checkCSRF(r) {
-		s.render(w, http.StatusForbidden, "error.html", map[string]any{
+		s.render(w, r, http.StatusForbidden, "error.html", map[string]any{
 			"Title":   "Expired form",
 			"Message": "This approval form is no longer valid. Start the sign-in again from the application.",
 		})
@@ -672,7 +673,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	// Only bounce to a URI some registered app actually owns; an open redirect
 	// here would be handed to every phishing attempt in the ecosystem.
 	if !s.isRegisteredOrigin(r.Context(), redirect) {
-		s.render(w, http.StatusBadRequest, "error.html", map[string]any{
+		s.render(w, r, http.StatusBadRequest, "error.html", map[string]any{
 			"Title":   "Redirect not allowed",
 			"Message": "post_logout_redirect_uri must belong to a registered Nabu application.",
 		})

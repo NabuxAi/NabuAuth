@@ -1,0 +1,17 @@
+{{define "telegram_return.html"}}{{template "head" .}}
+<main class="card auth">
+  <h1>{{t $.Lang "Signing in with Telegram"}}</h1>
+  {{/* Telegram puts the signed profile in the fragment, which only this page
+       can read. telegram.js copies it into the form and posts it with the
+       nonce of the flow this browser started. */}}
+  <form method="post" action="/login/telegram/callback" class="form" id="telegram-return">
+    <input type="hidden" name="nonce" value="{{.Nonce}}">
+    <input type="hidden" name="result" value="">
+    <p class="muted" data-waiting>{{t $.Lang "One moment…"}}</p>
+    <p class="muted" data-cancelled hidden>{{t $.Lang "Telegram did not confirm the sign-in. It may have been cancelled."}}</p>
+    <noscript><p class="muted">{{t $.Lang "This step needs JavaScript. Turn it on, or sign in another way."}}</p></noscript>
+  </form>
+  <p class="muted hint"><a href="/login{{if .Next}}?next={{.Next}}{{end}}">{{t $.Lang "Back to sign in"}}</a></p>
+</main>
+<script src="/static/telegram.js" defer></script>
+{{template "foot" .}}{{end}}

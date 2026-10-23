@@ -10,10 +10,12 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
 	"nabuauth/internal/config"
+	"nabuauth/internal/i18n"
 	"nabuauth/internal/mail"
 	"nabuauth/internal/mcp"
 	"nabuauth/internal/sms"
@@ -139,10 +141,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /", s.handleHome)
 	mux.HandleFunc("GET /login", s.handleLoginForm)
 	mux.HandleFunc("POST /login", s.handleLoginSubmit)
-	// Sign-in and sign-up are one form. These keep older links and bookmarks
-	// working rather than 404ing somebody mid-sign-in.
-	mux.HandleFunc("GET /register", s.handleRegisterRedirect)
-	mux.HandleFunc("POST /register", s.handleLoginSubmit)
+	// Creating an account by address, with a name and a confirmed password.
+	// POST /register also still takes the one-door form older pages post here.
+	mux.HandleFunc("GET /register", s.handleRegisterForm)
+	mux.HandleFunc("POST /register", s.handleRegisterSubmit)
 	// The second step for an address or a handle. Its own path so an empty
 	// password there is answered as an empty password rather than read as
 	// somebody asking the first question again.
@@ -158,12 +160,20 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /login/email/verify", s.handleEmailCodeVerify)
 	// External sign-in methods, one route pair for every provider a deployment
 	// configures.
+	// Telegram is not an OpenID provider, so it has its own routes; these are
+	// more specific than /login/{provider} and win over it.
+	mux.HandleFunc("GET /login/telegram", s.handleTelegramStart)
+	mux.HandleFunc("GET /login/telegram/callback", s.handleTelegramReturn)
+	mux.HandleFunc("POST /login/telegram/callback", s.handleTelegramCallback)
+	mux.HandleFunc("POST /dashboard/telegram/link", s.handleTelegramLink)
+	mux.HandleFunc("POST /dashboard/telegram/unlink", s.handleTelegramUnlink)
 	mux.HandleFunc("GET /login/{provider}", s.handleProviderStart)
 	mux.HandleFunc("GET /login/{provider}/callback", s.handleProviderCallback)
 
 	mux.HandleFunc("POST /logout", s.handleLogoutSubmit)
 	mux.HandleFunc("GET /dashboard", s.handleDashboard)
 	mux.HandleFunc("POST /dashboard/revoke", s.handleRevokeApp)
+	mux.HandleFunc("POST /dashboard/password", s.handlePasswordChange)
 
 	// Administrator pages. Sign-up is closed and every app treats a Nabu account
 	// as the way in, so this is the path to a second person.
@@ -198,7 +208,7 @@ func (s *Server) Handler() http.Handler {
 		}
 	}
 
-	return s.recover(s.limitBody(s.cors(mux)))
+	return s.recover(s.limitBody(s.cors(s.rememberLang(mux))))
 }
 
 // recover turns a handler panic into a 500 instead of killing the process and
@@ -359,9 +369,23 @@ func oauthError(w http.ResponseWriter, status int, code, description string) {
 	writeJSON(w, status, map[string]string{"error": code, "error_description": description})
 }
 
-func (s *Server) render(w http.ResponseWriter, status int, name string, data map[string]any) {
+// messageKeys are the data fields that carry a sentence written in Go rather
+// than in a template. They are English source text like the templates', and
+// are translated here, in one place, instead of at every call site.
+var messageKeys = []string{"Title", "Message", "Error", "Notice", "PhoneError", "PhoneNotice", "EmailError", "EmailNotice"}
+
+func (s *Server) render(w http.ResponseWriter, r *http.Request, status int, name string, data map[string]any) {
 	if data == nil {
 		data = map[string]any{}
+	}
+	lang := i18n.Pick(r)
+	data["Lang"] = lang.Code
+	data["Dir"] = lang.Dir
+	data["LangLinks"] = langLinks(r, lang.Code)
+	for _, key := range messageKeys {
+		if msg, ok := data[key].(string); ok && msg != "" {
+			data[key] = i18n.T(lang.Code, msg)
+		}
 	}
 	data["Issuer"] = s.cfg.Server.Issuer
 	data["AllowRegistration"] = s.cfg.Server.AllowRegistration
@@ -370,6 +394,44 @@ func (s *Server) render(w http.ResponseWriter, status int, name string, data map
 	if err := s.tmpl.ExecuteTemplate(w, name, data); err != nil {
 		s.log.Error("render template", "template", name, "error", err)
 	}
+}
+
+// langLink is one entry of the footer's language switcher.
+type langLink struct {
+	Code, Name, URL string
+	Current         bool
+}
+
+// langLinks points each language at this same page, keeping its query (a
+// next= in particular) and setting lang=.
+func langLinks(r *http.Request, current string) []langLink {
+	out := make([]langLink, 0, len(i18n.Langs))
+	for _, l := range i18n.Langs {
+		q := r.URL.Query()
+		q.Set("lang", l.Code)
+		u := url.URL{Path: r.URL.Path, RawQuery: q.Encode()}
+		out = append(out, langLink{Code: l.Code, Name: l.Name, URL: u.String(), Current: l.Code == current})
+	}
+	return out
+}
+
+// rememberLang keeps a ?lang= choice for the pages that follow — the redirect
+// after a form, the next visit — without every link having to carry it.
+func (s *Server) rememberLang(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if code := r.URL.Query().Get("lang"); i18n.Supported(code) {
+			http.SetCookie(w, &http.Cookie{
+				Name:     i18n.Cookie,
+				Value:    code,
+				Path:     "/",
+				MaxAge:   365 * 24 * 3600,
+				HttpOnly: true,
+				Secure:   s.cfg.Server.UseSecureCookies(),
+				SameSite: http.SameSiteLaxMode,
+			})
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // isNotFound reports whether an error came back as "no such row".

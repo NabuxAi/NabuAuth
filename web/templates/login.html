@@ -4,14 +4,14 @@
   <div class="app-head">
     <span class="app-mark">{{initials .Name}}</span>
     <div>
-      <h1>Continue to {{.Name}}</h1>
+      <h1>{{t $.Lang "Continue to %s" .Name}}</h1>
       {{if .Description}}<p class="sub">{{.Description}}</p>{{end}}
     </div>
   </div>
-  <p class="sub">Sign in with your Nabu account. One account works across every app in the ecosystem.</p>
+  <p class="sub">{{t $.Lang "Sign in with your Nabu account. One account works across every app in the ecosystem."}}</p>
   {{else}}
-  <h1>Sign in</h1>
-  <p class="sub">One Nabu account for every app in the ecosystem.</p>
+  <h1>{{t $.Lang "Sign in"}}</h1>
+  <p class="sub">{{t $.Lang "One Nabu account for every app in the ecosystem."}}</p>
   {{end}}
 
   {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
@@ -26,25 +26,31 @@
   <form method="post" action="/login" class="form">
     <input type="hidden" name="next" value="{{.Next}}">
     <label>
-      <span>Email, phone number or username</span>
-      <input type="text" name="identifier" value="{{.Identifier}}" autocomplete="username"
+      <span>{{t $.Lang "Email, phone number or username"}}</span>
+      <input type="text" name="identifier" value="{{.Identifier}}" autocomplete="username" dir="ltr"
              autocapitalize="none" spellcheck="false" required autofocus>
     </label>
-    <button type="submit" class="primary">Continue</button>
+    <button type="submit" class="primary">{{t $.Lang "Continue"}}</button>
   </form>
 
   {{if .AllowRegistration}}
-  <p class="muted hint">First time here? Type an email no Nabu account uses and the next step creates one. There is nothing else to fill in.</p>
+  {{/* Signing up is its own page with its own button: a newcomer looking for
+       "create account" should find those words, not a hint that typing an
+       unknown email into a sign-in box happens to make one. */}}
+  <p class="register-cta">
+    <span class="muted">{{t $.Lang "New to Nabu?"}}</span>
+    <a class="ghost small" href="/register{{if .Next}}?next={{.Next}}{{end}}">{{t $.Lang "Create an account"}}</a>
+  </p>
   {{else}}
-  <p class="muted hint">Nabu accounts are created by an administrator. Ask your team to invite you.</p>
+  <p class="muted hint">{{t $.Lang "Nabu accounts are created by an administrator. Ask your team to invite you."}}</p>
   {{end}}
 
   {{if .Sms}}
-  <p class="muted hint">A phone number is signed in with a code by SMS. Write it as you dial it at home, or with a + and the country code.</p>
+  <p class="muted hint">{{t $.Lang "A phone number is signed in with a code by SMS. Write it as you dial it at home, or with a + and the country code."}}</p>
   {{end}}
 
-  {{if .Providers}}
-  <div class="divider"><span>or</span></div>
+  {{if or .Providers .Telegram}}
+  <div class="divider"><span>{{t $.Lang "or"}}</span></div>
   <div class="providers">
     {{range .Providers}}
     <a class="provider provider-{{.ID}}" href="/login/{{.ID}}{{if $.Next}}?next={{$.Next}}{{end}}">
@@ -60,7 +66,16 @@
         <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"/>
       </svg>
       {{end}}
-      <span>Continue with {{.Name}}</span>
+      <span>{{t $.Lang "Continue with %s" .Name}}</span>
+    </a>
+    {{end}}
+    {{if .Telegram}}
+    <a class="provider provider-telegram" href="/login/telegram{{if .Next}}?next={{.Next}}{{end}}">
+      <svg class="provider-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <circle cx="12" cy="12" r="12" fill="#29A9EB"/>
+        <path fill="#fff" d="M5.4 11.8 16.9 7.3c.53-.2 1 .13.83.94l-1.96 9.23c-.14.66-.53.82-1.08.51l-3-2.21-1.45 1.4c-.16.16-.3.29-.6.29l.21-3.04 5.54-5c.24-.21-.05-.33-.37-.12l-6.85 4.31-2.95-.92c-.64-.2-.65-.64.14-.95z"/>
+      </svg>
+      <span>{{t $.Lang "Continue with %s" (t $.Lang "Telegram")}}</span>
     </a>
     {{end}}
   </div>
@@ -76,20 +91,20 @@
     <input type="hidden" name="phone" value="{{.Phone}}">
     <input type="hidden" name="country" value="{{.Country}}">
     <label>
-      <span>The code sent to {{.Phone}}</span>
-      <input type="text" name="code" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="8" required autofocus>
+      <span>{{t $.Lang "The code sent to %s" .Phone}}</span>
+      <input type="text" name="code" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="8" dir="ltr" required autofocus>
     </label>
-    <button type="submit" class="primary">Sign in</button>
+    <button type="submit" class="primary">{{t $.Lang "Sign in"}}</button>
   </form>
   <form method="post" action="/login/phone" class="form resend">
     <input type="hidden" name="next" value="{{.Next}}">
     <input type="hidden" name="phone" value="{{.Phone}}">
     <input type="hidden" name="country" value="{{.Country}}">
-    <button type="submit" class="ghost small">Send another code</button>
+    <button type="submit" class="ghost small">{{t $.Lang "Send another code"}}</button>
   </form>
   {{end}}
 
-  <p class="muted hint"><a href="/login{{if .Next}}?next={{.Next}}{{end}}">Use a different account</a></p>
+  <p class="muted hint"><a href="/login{{if .Next}}?next={{.Next}}{{end}}">{{t $.Lang "Use a different account"}}</a></p>
 
   {{/* Second step, address by code: the code that was just mailed. Reached only
        by asking for one from the password step; the one box routes an address
@@ -102,19 +117,19 @@
     <input type="hidden" name="next" value="{{.Next}}">
     <input type="hidden" name="email" value="{{.Identifier}}">
     <label>
-      <span>The code sent to {{.Identifier}}</span>
-      <input type="text" name="code" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="8" required autofocus>
+      <span>{{t $.Lang "The code sent to %s" .Identifier}}</span>
+      <input type="text" name="code" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="8" dir="ltr" required autofocus>
     </label>
-    <button type="submit" class="primary">Sign in</button>
+    <button type="submit" class="primary">{{t $.Lang "Sign in"}}</button>
   </form>
   <form method="post" action="/login/email" class="form resend">
     <input type="hidden" name="next" value="{{.Next}}">
     <input type="hidden" name="email" value="{{.Identifier}}">
-    <button type="submit" class="ghost small">Send another code</button>
+    <button type="submit" class="ghost small">{{t $.Lang "Send another code"}}</button>
   </form>
   {{end}}
 
-  <p class="muted hint"><a href="/login{{if .Next}}?next={{.Next}}{{end}}">Use a different account</a></p>
+  <p class="muted hint"><a href="/login{{if .Next}}?next={{.Next}}{{end}}">{{t $.Lang "Use a different account"}}</a></p>
 
   {{/* Second step, address or handle: the password. */}}
   {{else}}
@@ -124,14 +139,14 @@
     <input type="hidden" name="next" value="{{.Next}}">
     <input type="hidden" name="identifier" value="{{.Identifier}}">
     <label>
-      <span>Password</span>
+      <span>{{t $.Lang "Password"}}</span>
       <input type="password" name="password" autocomplete="current-password" required autofocus>
     </label>
-    <button type="submit" class="primary">Sign in</button>
+    <button type="submit" class="primary">{{t $.Lang "Sign in"}}</button>
   </form>
 
   {{if and .AllowRegistration (eq .Kind "email")}}
-  <p class="muted hint">If no Nabu account uses this address yet, the password you type creates one.</p>
+  <p class="muted hint">{{t $.Lang "If no Nabu account uses this address yet, the password you type creates one."}}</p>
   {{end}}
 
   {{if and .Mail (eq .Kind "email")}}
@@ -141,11 +156,11 @@
   <form method="post" action="/login/email" class="form resend">
     <input type="hidden" name="next" value="{{.Next}}">
     <input type="hidden" name="email" value="{{.Identifier}}">
-    <button type="submit" class="ghost small">Email me a sign-in code instead</button>
+    <button type="submit" class="ghost small">{{t $.Lang "Email me a sign-in code instead"}}</button>
   </form>
   {{end}}
 
-  <p class="muted hint"><a href="/login{{if .Next}}?next={{.Next}}{{end}}">Use a different account</a></p>
+  <p class="muted hint"><a href="/login{{if .Next}}?next={{.Next}}{{end}}">{{t $.Lang "Use a different account"}}</a></p>
   {{end}}
 </main>
 {{template "foot" .}}{{end}}

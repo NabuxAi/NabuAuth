@@ -1,0 +1,46 @@
+{{define "register.html"}}{{template "head" .}}
+<main class="card auth">
+  {{with .App}}
+  <div class="app-head">
+    <span class="app-mark">{{initials .Name}}</span>
+    <div>
+      <h1>{{t $.Lang "Create an account"}}</h1>
+      <p class="sub">{{t $.Lang "Then you continue to %s." .Name}}</p>
+    </div>
+  </div>
+  {{else}}
+  <h1>{{t $.Lang "Create an account"}}</h1>
+  {{end}}
+  <p class="sub">{{t $.Lang "One Nabu account for every app in the ecosystem."}}</p>
+
+  {{if .Error}}<p class="alert" role="alert">{{.Error}}{{if .Exists}} <a href="/login{{if .Next}}?next={{.Next}}{{end}}">{{t $.Lang "Sign in"}}</a>{{end}}</p>{{end}}
+
+  {{if .Open}}
+  <form method="post" action="/register" class="form">
+    <input type="hidden" name="next" value="{{.Next}}">
+    <label>
+      <span>{{t $.Lang "Name"}}</span>
+      <input type="text" name="name" value="{{.Name}}" autocomplete="name" maxlength="80" required autofocus>
+    </label>
+    <label>
+      <span>{{t $.Lang "Email"}}</span>
+      <input type="email" name="email" value="{{.Email}}" autocomplete="email" dir="ltr" autocapitalize="none" spellcheck="false" required>
+    </label>
+    <label>
+      <span>{{t $.Lang "Password"}} <em>{{t $.Lang "at least 10 characters"}}</em></span>
+      <input type="password" name="password" autocomplete="new-password" minlength="10" maxlength="72" required>
+    </label>
+    <label>
+      <span>{{t $.Lang "Password again"}}</span>
+      <input type="password" name="confirm" autocomplete="new-password" minlength="10" maxlength="72" required>
+    </label>
+    <button type="submit" class="primary">{{t $.Lang "Create account"}}</button>
+  </form>
+  {{else}}
+  <p class="muted hint">{{t $.Lang "Nabu accounts are created by an administrator. Ask your team to invite you."}}</p>
+  {{end}}
+
+  {{if .Sms}}<p class="muted hint">{{t $.Lang "No email? Sign in with your phone number and the account is made from it."}}</p>{{end}}
+  <p class="muted hint">{{t $.Lang "Already have an account?"}} <a href="/login{{if .Next}}?next={{.Next}}{{end}}">{{t $.Lang "Sign in"}}</a></p>
+</main>
+{{template "foot" .}}{{end}}

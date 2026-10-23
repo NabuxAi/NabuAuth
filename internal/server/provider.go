@@ -12,6 +12,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"nabuauth/internal/config"
+	"nabuauth/internal/i18n"
 	"nabuauth/internal/store"
 	"nabuauth/internal/tokens"
 )
@@ -37,7 +38,7 @@ const (
 func (s *Server) handleProviderStart(w http.ResponseWriter, r *http.Request) {
 	provider, ok := s.cfg.LoginMethod(r.PathValue("provider"))
 	if !ok {
-		s.render(w, http.StatusNotFound, "error.html", map[string]any{
+		s.render(w, r, http.StatusNotFound, "error.html", map[string]any{
 			"Title":   "Unknown sign-in method",
 			"Message": "That sign-in method is not available here.",
 		})
@@ -79,7 +80,7 @@ func (s *Server) handleProviderStart(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleProviderCallback(w http.ResponseWriter, r *http.Request) {
 	provider, ok := s.cfg.LoginMethod(r.PathValue("provider"))
 	if !ok {
-		s.render(w, http.StatusNotFound, "error.html", map[string]any{
+		s.render(w, r, http.StatusNotFound, "error.html", map[string]any{
 			"Title":   "Unknown sign-in method",
 			"Message": "That sign-in method is not available here.",
 		})
@@ -105,7 +106,7 @@ func (s *Server) handleProviderCallback(w http.ResponseWriter, r *http.Request) 
 	profile, err := s.exchangeWithProvider(r.Context(), provider, r.URL.Query().Get("code"))
 	if err != nil {
 		s.log.Error("provider exchange", "provider", provider.ID, "error", err)
-		fail(http.StatusBadGateway, "Could not complete the "+provider.Name+" sign-in. Try again.")
+		fail(http.StatusBadGateway, i18n.T(i18n.Pick(r).Code, "Could not complete the %s sign-in. Try again.", provider.Name))
 		return
 	}
 	if profile.Email == "" || !profile.EmailVerified {
@@ -247,7 +248,7 @@ func (s *Server) userForProvider(r *http.Request, profile providerProfile) (stor
 	if err != nil {
 		return store.User{}, err
 	}
-	return s.store.CreateUser(r.Context(), name, profile.Email, "", string(hash), count == 0)
+	return s.store.CreateUser(r.Context(), name, profile.Email, "", string(hash), count == 0, false)
 }
 
 // providerRedirectURI is where the provider sends the browser back. It is

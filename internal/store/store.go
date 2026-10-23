@@ -122,20 +122,27 @@ type User struct {
 	// sent to it. Unlike the email flag this one is really set, by the phone
 	// sign-in door, so an app that reads it hears something that happened.
 	PhoneVerified bool
-	CreatedAt     time.Time
+	// PasswordSet reports whether the owner knows the password: they chose it,
+	// or were shown it once. False for an account made by a phone, email-code
+	// or provider sign-in, whose stored hash is of a random string.
+	PasswordSet bool
+	// TelegramID is the Telegram account that signs in here, or 0.
+	TelegramID       int64
+	TelegramUsername string
+	CreatedAt        time.Time
 }
 
 type scanner interface{ Scan(...any) error }
 
-const userColumns = `id, name, COALESCE(email, ''), COALESCE(phone, ''), COALESCE(username, ''), password_hash, COALESCE(avatar_url, ''), is_active, is_admin, email_verified_at IS NOT NULL, phone_verified_at IS NOT NULL, created_at`
+const userColumns = `id, name, COALESCE(email, ''), COALESCE(phone, ''), COALESCE(username, ''), password_hash, COALESCE(avatar_url, ''), is_active, is_admin, email_verified_at IS NOT NULL, phone_verified_at IS NOT NULL, password_set_at IS NOT NULL, COALESCE(telegram_id, 0), COALESCE(telegram_username, ''), created_at`
 
 // userColumnsQualified is the same list with a table alias, for queries that
 // join sessions to users.
-const userColumnsQualified = `u.id, u.name, COALESCE(u.email, ''), COALESCE(u.phone, ''), COALESCE(u.username, ''), u.password_hash, COALESCE(u.avatar_url, ''), u.is_active, u.is_admin, u.email_verified_at IS NOT NULL, u.phone_verified_at IS NOT NULL, u.created_at`
+const userColumnsQualified = `u.id, u.name, COALESCE(u.email, ''), COALESCE(u.phone, ''), COALESCE(u.username, ''), u.password_hash, COALESCE(u.avatar_url, ''), u.is_active, u.is_admin, u.email_verified_at IS NOT NULL, u.phone_verified_at IS NOT NULL, u.password_set_at IS NOT NULL, COALESCE(u.telegram_id, 0), COALESCE(u.telegram_username, ''), u.created_at`
 
 func scanUser(row scanner) (User, error) {
 	var u User
-	if err := row.Scan(&u.ID, &u.Name, &u.Email, &u.Phone, &u.Username, &u.PasswordHash, &u.AvatarURL, &u.IsActive, &u.IsAdmin, &u.EmailVerified, &u.PhoneVerified, &u.CreatedAt); err != nil {
+	if err := row.Scan(&u.ID, &u.Name, &u.Email, &u.Phone, &u.Username, &u.PasswordHash, &u.AvatarURL, &u.IsActive, &u.IsAdmin, &u.EmailVerified, &u.PhoneVerified, &u.PasswordSet, &u.TelegramID, &u.TelegramUsername, &u.CreatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return User{}, ErrNotFound
 		}
@@ -145,9 +152,32 @@ func scanUser(row scanner) (User, error) {
 }
 
 // CreateUser inserts an account and opens its wallet in one transaction, so a
-// user can never exist without somewhere to hold credit.
-func (s *Store) CreateUser(ctx context.Context, name, email, phone, passwordHash string, isAdmin bool) (User, error) {
-	email = strings.ToLower(strings.TrimSpace(email))
+// user can never exist without somewhere to hold credit. passwordKnown says
+// whether anyone will ever know the password behind passwordHash: true when
+// the person typed it or was shown it, false for the doors that store a random
+// one (see User.PasswordSet).
+func (s *Store) CreateUser(ctx context.Context, name, email, phone, passwordHash string, isAdmin, passwordKnown bool) (User, error) {
+	return s.createUser(ctx, NewUser{Name: name, Email: email, Phone: phone, PasswordHash: passwordHash, IsAdmin: isAdmin, PasswordKnown: passwordKnown})
+}
+
+// NewUser is everything an account can be created with.
+type NewUser struct {
+	Name, Email, Phone, PasswordHash, AvatarURL string
+	IsAdmin, PasswordKnown                      bool
+	TelegramID                                  int64
+	TelegramUsername                            string
+}
+
+// CreateTelegramUser makes the account a Telegram sign-in opens when no account
+// is connected to that Telegram account yet — in the same transaction as the
+// wallet, so it never exists without one or without its Telegram id.
+func (s *Store) CreateTelegramUser(ctx context.Context, nu NewUser) (User, error) {
+	return s.createUser(ctx, nu)
+}
+
+func (s *Store) createUser(ctx context.Context, nu NewUser) (User, error) {
+	name, phone, passwordHash, isAdmin, passwordKnown := nu.Name, nu.Phone, nu.PasswordHash, nu.IsAdmin, nu.PasswordKnown
+	email := strings.ToLower(strings.TrimSpace(nu.Email))
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return User{}, err
@@ -165,8 +195,9 @@ func (s *Store) CreateUser(ctx context.Context, name, email, phone, passwordHash
 		emailArg = email
 	}
 	u, err := scanUser(tx.QueryRowContext(ctx,
-		`INSERT INTO users (name, email, phone, password_hash, is_admin) VALUES ($1, $2, $3, $4, $5) RETURNING `+userColumns,
-		name, emailArg, phoneArg, passwordHash, isAdmin))
+		`INSERT INTO users (name, email, phone, password_hash, is_admin, password_set_at, avatar_url, telegram_id, telegram_username)
+		 VALUES ($1, $2, $3, $4, $5, CASE WHEN $6 THEN now() END, NULLIF($7, ''), NULLIF($8, 0), NULLIF($9, '')) RETURNING `+userColumns,
+		name, emailArg, phoneArg, passwordHash, isAdmin, passwordKnown, nu.AvatarURL, nu.TelegramID, nu.TelegramUsername))
 	if err != nil {
 		if isUnique(err) {
 			return User{}, ErrDuplicate
@@ -189,6 +220,30 @@ func (s *Store) UserByEmail(ctx context.Context, email string) (User, error) {
 		return User{}, ErrNotFound
 	}
 	return scanUser(s.db.QueryRowContext(ctx, `SELECT `+userColumns+` FROM users WHERE email = $1`, email))
+}
+
+// UserByTelegramID looks an account up by the Telegram account connected to it.
+func (s *Store) UserByTelegramID(ctx context.Context, id int64) (User, error) {
+	if id == 0 {
+		return User{}, ErrNotFound
+	}
+	return scanUser(s.db.QueryRowContext(ctx, `SELECT `+userColumns+` FROM users WHERE telegram_id = $1`, id))
+}
+
+// LinkTelegram connects a Telegram account to this one. ErrDuplicate when that
+// Telegram account already opens a different Nabu account.
+func (s *Store) LinkTelegram(ctx context.Context, userID, telegramID int64, username string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE users SET telegram_id = $2, telegram_username = NULLIF($3, ''), updated_at = now() WHERE id = $1`, userID, telegramID, username)
+	if isUnique(err) {
+		return ErrDuplicate
+	}
+	return err
+}
+
+// UnlinkTelegram disconnects whichever Telegram account opens this one.
+func (s *Store) UnlinkTelegram(ctx context.Context, userID int64) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE users SET telegram_id = NULL, telegram_username = NULL, updated_at = now() WHERE id = $1`, userID)
+	return err
 }
 
 // UserByPhone looks an account up by its stored number. The argument is E.164
@@ -259,10 +314,38 @@ func (s *Store) UpdateProfile(ctx context.Context, id int64, name, phone, avatar
 	return err
 }
 
-// SetPassword replaces the stored password hash.
+// SetPassword replaces the stored password hash with one its owner knows.
 func (s *Store) SetPassword(ctx context.Context, id int64, hash string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE users SET password_hash = $2, updated_at = now() WHERE id = $1`, id, hash)
+	_, err := s.db.ExecContext(ctx, `UPDATE users SET password_hash = $2, password_set_at = now(), updated_at = now() WHERE id = $1`, id, hash)
 	return err
+}
+
+// ChangePassword is the owner changing their own password from a signed-in
+// browser. In one transaction: the new hash, every other browser session
+// signed out, and every app's refresh token revoked — a password changed
+// because somebody else got in has to end that somebody's access too, not
+// just at the next sign-in. The browser that made the change (keepSession)
+// stays signed in.
+func (s *Store) ChangePassword(ctx context.Context, id int64, hash, keepSession string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `UPDATE users SET password_hash = $2, password_set_at = now(), updated_at = now() WHERE id = $1`, id, hash)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2`, id, keepSession); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE oauth_refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`, id); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // CountUsers reports how many accounts exist; used to decide whether the first
@@ -684,6 +767,17 @@ func (s *Store) SessionUser(ctx context.Context, hash string) (User, error) {
 	return scanUser(s.db.QueryRowContext(ctx,
 		`SELECT `+userColumnsQualified+` FROM sessions s JOIN users u ON u.id = s.user_id
 		 WHERE s.token_hash = $1 AND s.expires_at > now() AND u.is_active`, hash))
+}
+
+// SessionStartedAt is when a browser session was signed in, which decides
+// whether it still counts as a fresh proof of who is at the keyboard.
+func (s *Store) SessionStartedAt(ctx context.Context, hash string) (time.Time, error) {
+	var at time.Time
+	err := s.db.QueryRowContext(ctx, `SELECT created_at FROM sessions WHERE token_hash = $1 AND expires_at > now()`, hash).Scan(&at)
+	if errors.Is(err, sql.ErrNoRows) {
+		return time.Time{}, ErrNotFound
+	}
+	return at, err
 }
 
 // RevokeUserSessions signs a user out of every browser. Used by a password

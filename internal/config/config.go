@@ -34,6 +34,10 @@ type Config struct {
 	// a relay.
 	Mail Mail `yaml:"mail"`
 
+	// Telegram is signing in with a Telegram account, through the bot named
+	// here. Off unless the token's environment variable is set.
+	Telegram Telegram `yaml:"telegram"`
+
 	// MCP is the Model Context Protocol endpoint.
 	MCP MCP `yaml:"mcp"`
 }
@@ -156,6 +160,37 @@ type Mail struct {
 // on a deployment with no relay would claim a code was sent when nothing was,
 // which is the failure this whole path exists to avoid.
 func (m Mail) Configured() bool { return m.Host != "" && m.From != "" }
+
+// Telegram is the bot a Telegram sign-in goes through. Telegram signs the
+// profile it hands back with a key derived from this bot's token, so the token
+// is the whole of the trust: it is a secret, named here by its environment
+// variable, never written into the file. The bot's domain has to be set to this
+// deployment's host in @BotFather (/setdomain), or Telegram refuses the login.
+type Telegram struct {
+	BotTokenEnv string `yaml:"bot_token_env"`
+}
+
+// BotToken is the token, or "" when the variable is unset.
+func (t Telegram) BotToken() string {
+	if t.BotTokenEnv == "" {
+		return ""
+	}
+	return strings.TrimSpace(os.Getenv(t.BotTokenEnv))
+}
+
+// BotID is the numeric part of the token before the colon, which is what
+// Telegram's login page is asked for.
+func (t Telegram) BotID() string {
+	id, _, ok := strings.Cut(t.BotToken(), ":")
+	if !ok {
+		return ""
+	}
+	return id
+}
+
+// Configured reports whether a Telegram sign-in can be offered. A button that
+// leads to a login Telegram will refuse is worse than no button.
+func (t Telegram) Configured() bool { return t.BotID() != "" }
 
 // ApplyDefaults fills in everything the mail block does not have to say.
 // Exported because Load is not the only way a Config is built — a caller
