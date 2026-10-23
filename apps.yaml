@@ -76,6 +76,10 @@ apps:
     redirect_uris:
       - https://gate.nabuxai.com/admin/api/nabu/callback
       - https://gate.nabuxai.com/api/nabu/callback
+      # The Iran mirror (NabuGate deploy/iran): the gateway builds its callback
+      # from the forwarded host, so a sign-in started there returns there.
+      - https://gate.nabuxai.ir/admin/api/nabu/callback
+      - https://gate.nabuxai.ir/api/nabu/callback
       - http://localhost:8080/api/nabu/callback
       - http://localhost:8080/admin/api/nabu/callback
     # NabuGate also meters usage, so it is the one app that may charge a wallet.
@@ -159,6 +163,11 @@ apps:
       # and other MCP clients, then asks for consent before handing the tokens
       # on (NabuPilot backend/oauth_server.js).
       - https://pilot.nabuxai.com/oauth/callback
+      # The Iran mirror: the office builds redirect_uri from location.origin, so
+      # a browser on pilot.nabuxai.ir asks to come back to it.
+      - https://pilot.nabuxai.ir/virtual-office/
+      - https://pilot.nabuxai.ir/webapp/
+      - https://pilot.nabuxai.ir/oauth/callback
     scopes: [openid, profile, email, wallet, offline]
 
   - id: nabuchat
