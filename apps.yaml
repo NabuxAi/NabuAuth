@@ -155,6 +155,10 @@ apps:
       # coming back from a phone into the 3D office is not where the visitor was.
       - https://pilot.nabuxai.com/virtual-office/
       - https://pilot.nabuxai.com/webapp/
+      # NabuPilot's MCP server signs people in here on behalf of Claude, ChatGPT
+      # and other MCP clients, then asks for consent before handing the tokens
+      # on (NabuPilot backend/oauth_server.js).
+      - https://pilot.nabuxai.com/oauth/callback
     scopes: [openid, profile, email, wallet, offline]
 
   - id: nabuchat
