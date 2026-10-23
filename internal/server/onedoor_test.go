@@ -144,21 +144,23 @@ func TestAClosedDeploymentWillNotSayWhichEmailsHaveAccounts(t *testing.T) {
 	}
 }
 
-func TestTheSignUpUrlLeadsToTheOneForm(t *testing.T) {
+func TestTheSignUpUrlIsACreateAccountPage(t *testing.T) {
 	ts, _ := newTestServer(t)
-	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 
-	resp, err := client.Get(ts.URL + "/register?next=%2Fdashboard")
+	resp, err := http.Get(ts.URL + "/register?next=%2Fdashboard&lang=en")
 	if err != nil {
 		t.Fatalf("get register: %v", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusFound {
-		t.Fatalf("got %d, want a redirect", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("got %d, want the create-account page", resp.StatusCode)
 	}
-	if loc := resp.Header.Get("Location"); loc != "/login?next=%2Fdashboard" {
-		t.Fatalf("sent to %q, want the sign-in form with the destination kept", loc)
+	body := readBody(t, resp)
+	for _, want := range []string{`action="/register"`, `name="confirm"`, `name="name"`, `name="next" value="/dashboard"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the create-account page lacks %s", want)
+		}
 	}
 }
 

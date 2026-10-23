@@ -34,6 +34,27 @@ ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_key ON users (lower(username));
 
+-- When the account's owner last chose (or was shown) its password. NULL means
+-- nobody knows it: the phone, email-code and provider doors store a random hash
+-- the person has never seen. Changing a password asks for the current one
+-- unless this is NULL, so without the column a passwordless account could never
+-- get a password at all. Added with a default so every account that existed
+-- before this column reads as having a known password — the cautious answer,
+-- since that keeps asking them for it — then the default is dropped so new
+-- rows say what their door actually did. Both statements are no-ops on later
+-- boots.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_set_at TIMESTAMPTZ DEFAULT now();
+ALTER TABLE users ALTER COLUMN password_set_at DROP DEFAULT;
+
+-- A Telegram account that signs in to this one. Telegram gives no email or
+-- phone number, so its numeric id is the only thing to recognise it by; unique,
+-- so one Telegram account opens exactly one Nabu account. The username is kept
+-- only to show which Telegram account is connected; it can change, the id
+-- cannot.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_id BIGINT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_username TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS users_telegram_id_key ON users (telegram_id);
+
 -- One-time codes for phone sign-in. Keyed by the number rather than by a user:
 -- the code is asked for before anyone knows whether an account exists, and this
 -- table must not become the place to ask. Only the hash is stored, for the same

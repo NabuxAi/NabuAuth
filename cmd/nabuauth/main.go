@@ -261,7 +261,7 @@ func createUser(ctx context.Context, st *store.Store, email, name string, admin 
 		return err
 	}
 
-	user, err := st.CreateUser(ctx, name, email, "", string(hash), admin)
+	user, err := st.CreateUser(ctx, name, email, "", string(hash), admin, true)
 	if errors.Is(err, store.ErrDuplicate) {
 		return fmt.Errorf("an account with that email or phone already exists")
 	}

@@ -17,6 +17,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"nabuauth/internal/i18n"
 	"nabuauth/internal/sms"
 	"nabuauth/internal/store"
 )
@@ -37,9 +38,9 @@ const (
 	maxAttempts = 8
 	lockFor     = 10 * time.Minute
 
-	// minPasswordLen is checked only when an account is being created. Signing
-	// in compares against the stored hash, so an account made before this rule
-	// still works with the password it has.
+	// minPasswordLen is checked when an account is created and when a password
+	// is changed. Signing in compares against the stored hash, so an account
+	// made before this rule still works with the password it has.
 	minPasswordLen = 10
 
 	// welcomeCookie marks a session that began by creating the account, so the
@@ -120,9 +121,9 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	// ServeMux's "GET /" matches everything unmatched, so unknown paths land
 	// here and must 404 rather than silently render the dashboard.
 	if r.URL.Path != "/" {
-		s.render(w, http.StatusNotFound, "error.html", map[string]any{
+		s.render(w, r, http.StatusNotFound, "error.html", map[string]any{
 			"Title":   "Not found",
-			"Message": "There is nothing at " + r.URL.Path + ".",
+			"Message": i18n.T(i18n.Pick(r).Code, "There is nothing at %s.", r.URL.Path),
 		})
 		return
 	}
@@ -360,10 +361,10 @@ func (s *Server) finishPassword(w http.ResponseWriter, r *http.Request, next str
 		if len(password) < minPasswordLen {
 			// The account does not exist, so this is a sign-up, and saying so is
 			// what stops a mistyped address from reading as a broken password.
-			fail(http.StatusBadRequest, fmt.Sprintf("No Nabu account uses %s yet. To create one now, choose a password of at least %d characters.", value, minPasswordLen))
+			fail(http.StatusBadRequest, i18n.T(i18n.Pick(r).Code, "No Nabu account uses %s yet. To create one now, choose a password of at least %d characters.", value, minPasswordLen))
 			return
 		}
-		user, err = s.createAccount(r, value, password)
+		user, err = s.createAccount(r, nameFromEmail(value), value, password)
 		if errors.Is(err, store.ErrDuplicate) {
 			// Two submissions raced. The account exists now, so the second one is
 			// an ordinary sign-in that has to prove the password.
@@ -385,17 +386,7 @@ func (s *Server) finishPassword(w http.ResponseWriter, r *http.Request, next str
 		return
 	}
 	if created {
-		// Read and cleared by whichever screen comes next, so a brand-new account
-		// is told it is new exactly once.
-		http.SetCookie(w, &http.Cookie{
-			Name:     welcomeCookie,
-			Value:    "1",
-			Path:     "/",
-			MaxAge:   300,
-			HttpOnly: true,
-			Secure:   s.cfg.Server.UseSecureCookies(),
-			SameSite: http.SameSiteLaxMode,
-		})
+		s.markWelcome(w)
 	}
 	if next == "" {
 		next = "/dashboard"
@@ -408,8 +399,8 @@ func (s *Server) finishPassword(w http.ResponseWriter, r *http.Request, next str
 const dummyHash = "$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvalidin"
 
 // createAccount makes the account behind an email nobody has claimed yet.
-func (s *Server) createAccount(r *http.Request, email, password string) (store.User, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+func (s *Server) createAccount(r *http.Request, name, email, password string) (store.User, error) {
+	hash, err := hashForNewAccount(password)
 	if err != nil {
 		return store.User{}, err
 	}
@@ -419,17 +410,7 @@ func (s *Server) createAccount(r *http.Request, email, password string) (store.U
 	if err != nil {
 		return store.User{}, err
 	}
-	return s.store.CreateUser(r.Context(), nameFromEmail(email), email, "", string(hash), count == 0)
-}
-
-// handleRegisterRedirect keeps every /register link in the ecosystem working.
-// Signing in and signing up are the same door now, so this one leads to it.
-func (s *Server) handleRegisterRedirect(w http.ResponseWriter, r *http.Request) {
-	target := "/login"
-	if next := safeNext(r.URL.Query().Get("next")); next != "" {
-		target += "?next=" + url.QueryEscape(next)
-	}
-	http.Redirect(w, r, target, http.StatusFound)
+	return s.store.CreateUser(r.Context(), name, email, "", hash, count == 0, true)
 }
 
 // loginView is the state of the door: which step it is on, what was typed into
@@ -480,7 +461,7 @@ func (s *Server) renderCredential(w http.ResponseWriter, r *http.Request, status
 }
 
 func (s *Server) renderLoginView(w http.ResponseWriter, r *http.Request, status int, v loginView) {
-	s.render(w, status, "login.html", map[string]any{
+	s.render(w, r, status, "login.html", map[string]any{
 		"Title":      "Sign in to Nabu",
 		"Next":       v.Next,
 		"Email":      v.Email,
@@ -493,6 +474,7 @@ func (s *Server) renderLoginView(w http.ResponseWriter, r *http.Request, status 
 		// sign-up is closed but the database has no accounts yet.
 		"AllowRegistration": s.registrationOpen(r),
 		"Providers":         s.cfg.EnabledLoginMethods(),
+		"Telegram":          s.cfg.Telegram.Configured(),
 		// The phone half exists only where a gateway is configured. A field that
 		// cannot send a code would report one as sent, which is the whole defect
 		// this door is here to not repeat.
@@ -557,6 +539,20 @@ func nameFromEmail(email string) string {
 
 // takeWelcome reports whether this session was created by signing up a moment
 // ago, clearing the marker so the message is shown once.
+// markWelcome is read and cleared by whichever screen comes next, so a
+// brand-new account is told it is new exactly once.
+func (s *Server) markWelcome(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     welcomeCookie,
+		Value:    "1",
+		Path:     "/",
+		MaxAge:   300,
+		HttpOnly: true,
+		Secure:   s.cfg.Server.UseSecureCookies(),
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
 func (s *Server) takeWelcome(w http.ResponseWriter, r *http.Request) bool {
 	c, err := r.Cookie(welcomeCookie)
 	if err != nil || c.Value == "" {
@@ -630,7 +626,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 			"Connected":   connected,
 		})
 	}
-	s.render(w, http.StatusOK, "dashboard.html", map[string]any{
+	s.render(w, r, http.StatusOK, "dashboard.html", map[string]any{
 		"Title":        "Your Nabu account",
 		"NewAccount":   s.takeWelcome(w, r),
 		"User":         user,
@@ -639,6 +635,11 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		"BalanceMajor": formatMoney(wallet.BalanceCents, wallet.Currency),
 		"Transactions": entries,
 		"CSRF":         s.csrfToken(r),
+		// The outcome of the last password and Telegram forms, as codes the
+		// page words.
+		"Password":        r.URL.Query().Get("password"),
+		"TelegramNotice":  r.URL.Query().Get("telegram"),
+		"TelegramEnabled": s.cfg.Telegram.Configured(),
 	})
 }
 

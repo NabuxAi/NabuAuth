@@ -4,55 +4,110 @@
     <div class="avatar">{{if .User.AvatarURL}}<img src="{{.User.AvatarURL}}" alt="">{{else}}{{initials .User.Name}}{{end}}</div>
     <div>
       <h1>{{.User.Name}}</h1>
-      <p class="sub">{{.User.Email}}{{if .User.IsAdmin}} · <span class="badge">Administrator</span>{{end}}</p>
+      <p class="sub"><span dir="ltr">{{if .User.Email}}{{.User.Email}}{{else}}{{.User.Phone}}{{end}}</span>{{if .User.IsAdmin}} · <span class="badge">{{t $.Lang "Administrator"}}</span>{{end}}</p>
     </div>
-    <div style="margin-left:auto;display:flex;gap:.5rem;align-items:center">
-      {{if .User.IsAdmin}}<a class="ghost small" href="/admin/users">Manage accounts</a>{{end}}
-      <form method="post" action="/logout"><button type="submit" class="ghost">Sign out</button></form>
+    <div class="push" style="display:flex;gap:.5rem;align-items:center">
+      {{if .User.IsAdmin}}<a class="ghost small" href="/admin/users">{{t $.Lang "Manage accounts"}}</a>{{end}}
+      <form method="post" action="/logout"><button type="submit" class="ghost">{{t $.Lang "Sign out"}}</button></form>
     </div>
   </header>
 
+  {{if .NewAccount}}<section><p class="notice" role="status">{{t $.Lang "Your Nabu account is ready. It signs you in to every app below."}}</p></section>{{end}}
+
   <section class="wallet">
-    <h2>Wallet</h2>
-    <p class="balance">{{.BalanceMajor}} <span>{{.Wallet.Currency}}</span></p>
-    <p class="muted">Shared across NabuGate models, NabuVoice speech and NabuGen media.</p>
+    <h2>{{t $.Lang "Wallet"}}</h2>
+    <p class="balance" dir="ltr">{{.BalanceMajor}} <span>{{.Wallet.Currency}}</span></p>
+    <p class="muted">{{t $.Lang "Shared across NabuGate models, NabuVoice speech and NabuGen media."}}</p>
     {{if .Transactions}}
     <table class="ledger">
-      <thead><tr><th>When</th><th>What</th><th class="num">Amount</th><th class="num">Balance</th></tr></thead>
+      <thead><tr><th>{{t $.Lang "When"}}</th><th>{{t $.Lang "What"}}</th><th class="num">{{t $.Lang "Amount"}}</th><th class="num">{{t $.Lang "Balance"}}</th></tr></thead>
       <tbody>
         {{range .Transactions}}
         <tr>
-          <td>{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
+          <td dir="ltr">{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
           <td>{{.Description}}</td>
-          <td class="num {{if lt .AmountCents 0}}debit{{else}}credit{{end}}">{{.AmountCents}}</td>
-          <td class="num">{{.BalanceAfterCents}}</td>
+          <td class="num {{if lt .AmountCents 0}}debit{{else}}credit{{end}}" dir="ltr">{{.AmountCents}}</td>
+          <td class="num" dir="ltr">{{.BalanceAfterCents}}</td>
         </tr>
         {{end}}
       </tbody>
     </table>
-    {{else}}<p class="muted">No activity yet.</p>{{end}}
+    {{else}}<p class="muted">{{t $.Lang "No activity yet."}}</p>{{end}}
   </section>
 
   <section>
-    <h2>Your apps</h2>
+    <h2>{{t $.Lang "Your apps"}}</h2>
     <div class="apps">
       {{range .Apps}}
       <article class="app">
         <h3>{{.Name}}</h3>
-        <p>{{.Description}}</p>
+        <p>{{t $.Lang .Description}}</p>
         <div class="app-foot">
-          <a class="primary small" href="{{.SSOURL}}">Open</a>
+          <a class="primary small" href="{{.SSOURL}}">{{t $.Lang "Open"}}</a>
           {{if .Connected}}
           <form method="post" action="/dashboard/revoke">
             <input type="hidden" name="csrf" value="{{$.CSRF}}">
             <input type="hidden" name="client_id" value="{{.ID}}">
-            <button type="submit" class="ghost small">Disconnect</button>
+            <button type="submit" class="ghost small">{{t $.Lang "Disconnect"}}</button>
           </form>
           {{end}}
         </div>
       </article>
       {{end}}
     </div>
+  </section>
+
+  {{if .TelegramEnabled}}
+  <section id="telegram" class="security">
+    <h2>{{t $.Lang "Telegram"}}</h2>
+    {{with .TelegramNotice}}
+      {{if eq . "linked"}}<p class="notice" role="status">{{t $.Lang "Telegram is connected. You can now sign in with it."}}</p>
+      {{else if eq . "taken"}}<p class="notice err" role="alert">{{t $.Lang "That Telegram account already signs in to another Nabu account."}}</p>
+      {{else if eq . "unlinked"}}<p class="notice" role="status">{{t $.Lang "Telegram is disconnected."}}</p>
+      {{else if eq . "last"}}<p class="notice err" role="alert">{{t $.Lang "Telegram is the only way into this account. Set a password first, then disconnect it."}}</p>
+      {{else}}<p class="notice err" role="alert">{{t $.Lang "Telegram could not be connected. Try again."}}</p>{{end}}
+    {{end}}
+    {{if .User.TelegramID}}
+    <p class="muted">{{t $.Lang "Connected"}}{{if .User.TelegramUsername}} · <span dir="ltr">@{{.User.TelegramUsername}}</span>{{end}}</p>
+    <form method="post" action="/dashboard/telegram/unlink">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <button type="submit" class="ghost small">{{t $.Lang "Disconnect Telegram"}}</button>
+    </form>
+    {{else}}
+    <p class="muted">{{t $.Lang "Connect your Telegram account to sign in with it, with no password to remember."}}</p>
+    <form method="post" action="/dashboard/telegram/link">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <button type="submit" class="ghost small">{{t $.Lang "Connect Telegram"}}</button>
+    </form>
+    {{end}}
+  </section>
+  {{end}}
+
+  <section id="password" class="security">
+    <h2>{{if .User.PasswordSet}}{{t $.Lang "Change password"}}{{else}}{{t $.Lang "Set a password"}}{{end}}</h2>
+    {{with .Password}}
+      {{if eq . "changed"}}<p class="notice" role="status">{{t $.Lang "Your password was saved. Every other browser and app was signed out; this one stays signed in."}}</p>
+      {{else if eq . "wrong"}}<p class="notice err" role="alert">{{t $.Lang "The current password is not right."}}</p>
+      {{else if eq . "short"}}<p class="notice err" role="alert">{{t $.Lang "The new password needs at least 10 characters."}}</p>
+      {{else if eq . "long"}}<p class="notice err" role="alert">{{t $.Lang "The new password can be at most 72 characters."}}</p>
+      {{else if eq . "mismatch"}}<p class="notice err" role="alert">{{t $.Lang "The two new passwords are not the same."}}</p>
+      {{else if eq . "throttled"}}<p class="notice err" role="alert">{{t $.Lang "Too many wrong attempts. Try again in a few minutes."}}</p>
+      {{else if eq . "stale"}}<p class="notice err" role="alert">{{t $.Lang "To set a first password, sign out and sign in again, then set it within 10 minutes."}}</p>
+      {{else}}<p class="notice err" role="alert">{{t $.Lang "The password could not be saved. Try again."}}</p>{{end}}
+    {{end}}
+    {{if not .User.PasswordSet}}<p class="muted">{{t $.Lang "You signed in with a code or another account, so this account has no password yet. Setting one lets you sign in with a password too."}}</p>{{end}}
+    <form method="post" action="/dashboard/password" class="form">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      {{/* A hidden username lets password managers file the new password under the right account. */}}
+      <input type="hidden" name="username" autocomplete="username" value="{{if .User.Email}}{{.User.Email}}{{else}}{{.User.Phone}}{{end}}">
+      {{if .User.PasswordSet}}
+      <label><span>{{t $.Lang "Current password"}}</span><input type="password" name="current" autocomplete="current-password" required></label>
+      {{end}}
+      <label><span>{{t $.Lang "New password"}}</span><input type="password" name="new" autocomplete="new-password" minlength="10" maxlength="72" required></label>
+      <label><span>{{t $.Lang "New password again"}}</span><input type="password" name="confirm" autocomplete="new-password" minlength="10" maxlength="72" required></label>
+      <button type="submit" class="primary">{{if .User.PasswordSet}}{{t $.Lang "Change password"}}{{else}}{{t $.Lang "Set password"}}{{end}}</button>
+      <p class="muted small">{{t $.Lang "Saving signs out every other browser and app."}}</p>
+    </form>
   </section>
 </main>
 {{template "foot" .}}{{end}}

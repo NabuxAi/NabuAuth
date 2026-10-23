@@ -58,6 +58,13 @@ sms:
 
 # Every scope an app may request, with the sentence the user reads on the
 # consent screen. An app requesting a scope that is not listed here is refused.
+# Signing in with Telegram. The bot's token is the key Telegram signs the login
+# with, so it is a secret and lives only in the environment. Off while the
+# variable is unset. The bot's domain must be this deployment's host, set with
+# /setdomain in @BotFather, or Telegram refuses the login.
+telegram:
+  bot_token_env: NABUAUTH_TELEGRAM_BOT_TOKEN
+
 scopes:
   openid: Confirm your Nabu identity
   profile: Your name, avatar and phone number

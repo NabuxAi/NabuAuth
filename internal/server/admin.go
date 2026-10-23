@@ -10,6 +10,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"nabuauth/internal/i18n"
 	"nabuauth/internal/store"
 )
 
@@ -39,7 +40,7 @@ func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (store.Use
 		return store.User{}, false
 	}
 	if !user.IsAdmin {
-		s.render(w, http.StatusForbidden, "error.html", map[string]any{
+		s.render(w, r, http.StatusForbidden, "error.html", map[string]any{
 			"Title":   "Not allowed",
 			"Message": "Only an administrator can manage Nabu accounts.",
 		})
@@ -68,7 +69,7 @@ func (s *Server) renderAdminUsers(w http.ResponseWriter, r *http.Request, admin 
 	if errMsg != "" {
 		status = http.StatusBadRequest
 	}
-	s.render(w, status, "admin_users.html", map[string]any{
+	s.render(w, r, status, "admin_users.html", map[string]any{
 		"Title":       "Nabu accounts",
 		"User":        admin,
 		"Users":       users,
@@ -135,7 +136,7 @@ func (s *Server) handleAdminCreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := s.store.CreateUser(r.Context(), name, email, "", string(hash), makeAdmin)
+	user, err := s.store.CreateUser(r.Context(), name, email, "", string(hash), makeAdmin, true)
 	if errors.Is(err, store.ErrDuplicate) {
 		s.renderAdminUsers(w, r, admin, nil, "", "That email is already registered.")
 		return
@@ -151,7 +152,7 @@ func (s *Server) handleAdminCreateUser(w http.ResponseWriter, r *http.Request) {
 			// The account exists and works; only the handle was refused, and
 			// saying which of the two happened is the difference between a
 			// confused administrator and an informed one.
-			s.renderAdminUsers(w, r, admin, &user, password, "The account was created, but the username "+username+" is taken.")
+			s.renderAdminUsers(w, r, admin, &user, password, i18n.T(i18n.Pick(r).Code, "The account was created, but the username %s is taken.", username))
 			return
 		case err != nil:
 			s.log.Error("set username", "error", err)

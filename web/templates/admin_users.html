@@ -3,70 +3,68 @@
   <header class="account">
     <div class="avatar">{{initials .User.Name}}</div>
     <div>
-      <h1>Nabu accounts</h1>
-      <p class="sub">One account signs a person in to every product in the ecosystem.</p>
+      <h1>{{t $.Lang "Nabu accounts"}}</h1>
+      <p class="sub">{{t $.Lang "One account signs a person in to every product in the ecosystem."}}</p>
     </div>
-    <a class="ghost small" href="/dashboard" style="margin-left:auto">Back to your account</a>
+    <a class="ghost small push" href="/dashboard">{{t $.Lang "Back to your account"}}</a>
   </header>
 
   {{if .Error}}<section><p class="alert" role="alert">{{.Error}}</p></section>{{end}}
 
   {{if .Created}}
   <section>
-    <h2>{{.Created.Email}} can now sign in</h2>
-    <p class="muted">This password is shown once and is not stored anywhere in
-      readable form. Send it over a channel you trust, and have them change it
-      after signing in.</p>
-    <p class="balance" style="font-size:1.35rem">{{.Password}}</p>
+    <h2>{{t $.Lang "%s can now sign in" .Created.Email}}</h2>
+    <p class="muted">{{t $.Lang "This password is shown once and is not stored anywhere in readable form. Send it over a channel you trust, and have them change it after signing in."}}</p>
+    <p dir="ltr" class="balance" style="font-size:1.35rem">{{.Password}}</p>
   </section>
   {{end}}
 
   <section>
-    <h2>Add someone</h2>
+    <h2>{{t $.Lang "Add someone"}}</h2>
     <form method="post" action="/admin/users" class="form">
       <input type="hidden" name="csrf" value="{{.CSRF}}">
       <label>
-        <span>Email</span>
-        <input type="email" name="email" required autocomplete="off">
+        <span>{{t $.Lang "Email"}}</span>
+        <input type="email" name="email" required autocomplete="off" dir="ltr">
       </label>
       <label>
-        <span>Name <em>optional</em></span>
+        <span>{{t $.Lang "Name"}} <em>{{t $.Lang "optional"}}</em></span>
         <input type="text" name="name" autocomplete="off">
       </label>
       <label>
-        <span>Username <em>optional — a third way to sign in</em></span>
-        <input type="text" name="username" autocomplete="off" autocapitalize="none" spellcheck="false"
+        <span>{{t $.Lang "Username"}} <em>{{t $.Lang "optional — a third way to sign in"}}</em></span>
+        <input type="text" name="username" autocomplete="off" autocapitalize="none" spellcheck="false" dir="ltr"
                pattern="[a-z0-9][a-z0-9._-]{1,30}[a-z0-9]">
       </label>
       <label style="display:flex;gap:.5rem;align-items:center">
         <input type="checkbox" name="is_admin" value="yes" style="width:auto">
-        <span>Administrator — can manage accounts</span>
+        <span>{{t $.Lang "Administrator — can manage accounts"}}</span>
       </label>
-      <button type="submit" class="primary">Create account</button>
+      <button type="submit" class="primary">{{t $.Lang "Create account"}}</button>
     </form>
   </section>
 
   <section>
-    <h2>Everyone</h2>
+    <h2>{{t $.Lang "Everyone"}}</h2>
     <table class="ledger">
-      <thead><tr><th>Name</th><th>Email</th><th>Username</th><th>Role</th><th>Since</th><th></th></tr></thead>
+      <thead><tr><th>{{t $.Lang "Name"}}</th><th>{{t $.Lang "Email"}}</th><th>{{t $.Lang "Username"}}</th><th>{{t $.Lang "Role"}}</th><th>{{t $.Lang "Since"}}</th><th></th></tr></thead>
       <tbody>
         {{range .Users}}
         <tr>
           <td>{{.Name}}</td>
-          <td>{{.Email}}</td>
-          <td>{{if .Username}}{{.Username}}{{else}}<span class="muted">—</span>{{end}}</td>
-          <td>{{if .IsAdmin}}<span class="badge">Administrator</span>{{else}}Member{{end}}</td>
-          <td>{{.CreatedAt.Format "2006-01-02"}}</td>
+          <td dir="ltr">{{.Email}}</td>
+          <td dir="ltr">{{if .Username}}{{.Username}}{{else}}<span class="muted">—</span>{{end}}</td>
+          <td>{{if .IsAdmin}}<span class="badge">{{t $.Lang "Administrator"}}</span>{{else}}{{t $.Lang "Member"}}{{end}}</td>
+          <td dir="ltr">{{.CreatedAt.Format "2006-01-02"}}</td>
           <td class="num">
             {{if eq .ID $.SelfID}}
-              <span class="muted">you</span>
+              <span class="muted">{{t $.Lang "you"}}</span>
             {{else}}
               <form method="post" action="/admin/users/active">
                 <input type="hidden" name="csrf" value="{{$.CSRF}}">
                 <input type="hidden" name="user_id" value="{{.ID}}">
                 <input type="hidden" name="active" value="{{if .IsActive}}no{{else}}yes{{end}}">
-                <button type="submit" class="ghost small">{{if .IsActive}}Disable{{else}}Enable{{end}}</button>
+                <button type="submit" class="ghost small">{{if .IsActive}}{{t $.Lang "Disable"}}{{else}}{{t $.Lang "Enable"}}{{end}}</button>
               </form>
             {{end}}
           </td>
@@ -74,7 +72,7 @@
         {{end}}
       </tbody>
     </table>
-    <p class="muted">Disabling an account stops it signing in and ends every session it has open.</p>
+    <p class="muted">{{t $.Lang "Disabling an account stops it signing in and ends every session it has open."}}</p>
   </section>
 </main>
 {{template "foot" .}}{{end}}

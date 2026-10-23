@@ -7,6 +7,8 @@ import (
 	"embed"
 	"html/template"
 	"io/fs"
+
+	"nabuauth/internal/i18n"
 )
 
 //go:embed templates/*.html
@@ -32,6 +34,10 @@ func Static() fs.FS {
 }
 
 var funcs = template.FuncMap{
+	// t translates English source text into the page's language:
+	// {{t $.Lang "Continue to %s" .Name}}. $ rather than . so it works inside
+	// with and range blocks, where . is something else.
+	"t": func(lang, msg string, args ...any) string { return i18n.T(lang, msg, args...) },
 	// initials renders an avatar fallback from a display name.
 	"initials": func(name string) string {
 		out := []rune{}

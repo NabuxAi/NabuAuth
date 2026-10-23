@@ -69,7 +69,7 @@ func TestAnAdministratorIsNotReportedAsASignup(t *testing.T) {
 	_, st := newTestServer(t)
 	reportingOn(t, st)
 
-	if _, err := st.CreateUser(context.Background(), "Staff", "staff@nabuxai.com", "", "x", true); err != nil {
+	if _, err := st.CreateUser(context.Background(), "Staff", "staff@nabuxai.com", "", "x", true, true); err != nil {
 		t.Fatal(err)
 	}
 	if rows := outboxRows(t, st); len(rows) != 0 {
@@ -98,7 +98,7 @@ func TestABrokenOutboxNeverStopsAnAccountBeingCreated(t *testing.T) {
 	var heard error
 	st.ReportSignups(true, func(err error) { heard = err })
 
-	u, err := st.CreateUser(ctx, "Sara", "sara@example.com", "", "x", false)
+	u, err := st.CreateUser(ctx, "Sara", "sara@example.com", "", "x", false, true)
 	if err != nil {
 		t.Fatalf("account creation failed because the outbox did: %v", err)
 	}
@@ -117,7 +117,7 @@ func TestTheBackfillIsIdempotentAndAgreesWithTheLiveHook(t *testing.T) {
 	// Two accounts from before reporting existed, an administrator, then one live.
 	seedUser(t, st, "old1@example.com", "password-123")
 	seedUser(t, st, "old2@example.com", "password-123")
-	if _, err := st.CreateUser(ctx, "Staff", "staff@nabuxai.com", "", "x", true); err != nil {
+	if _, err := st.CreateUser(ctx, "Staff", "staff@nabuxai.com", "", "x", true, true); err != nil {
 		t.Fatal(err)
 	}
 	reportingOn(t, st)

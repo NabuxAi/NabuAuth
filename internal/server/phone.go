@@ -359,14 +359,14 @@ func (s *Server) userForPhone(r *http.Request, e164 string) (store.User, error) 
 	if err != nil {
 		return store.User{}, err
 	}
-	return s.store.CreateUser(r.Context(), e164, "", e164, string(hash), count == 0)
+	return s.store.CreateUser(r.Context(), e164, "", e164, string(hash), count == 0, false)
 }
 
 // phoneUnavailable is what a deployment with no gateway answers on either phone
 // route: the same 404 an unconfigured external provider gets, because a route
 // that cannot send a code should not be reachable at all.
-func (s *Server) phoneUnavailable(w http.ResponseWriter, _ *http.Request) {
-	s.render(w, http.StatusNotFound, "error.html", map[string]any{
+func (s *Server) phoneUnavailable(w http.ResponseWriter, r *http.Request) {
+	s.render(w, r, http.StatusNotFound, "error.html", map[string]any{
 		"Title":   "Unknown sign-in method",
 		"Message": "Signing in with a phone number is not available here.",
 	})

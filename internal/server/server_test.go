@@ -96,7 +96,16 @@ func newTestServer(t *testing.T, tweaks ...func(*config.Config)) (*httptest.Serv
 	if err := srv.SyncApps(ctx); err != nil {
 		t.Fatalf("sync apps: %v", err)
 	}
-	ts := httptest.NewServer(srv.Handler())
+	// The pages default to Persian. These tests read the English source text,
+	// so a client that names no language is answered in English here; the
+	// language tests name theirs.
+	handler := srv.Handler()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Accept-Language") == "" {
+			r.Header.Set("Accept-Language", "en")
+		}
+		handler.ServeHTTP(w, r)
+	}))
 	t.Cleanup(ts.Close)
 	return ts, st
 }
@@ -108,7 +117,7 @@ func seedUser(t *testing.T, st *store.Store, email, password string) store.User 
 	if err != nil {
 		t.Fatalf("hash: %v", err)
 	}
-	u, err := st.CreateUser(context.Background(), "Test User", email, "", string(hash), false)
+	u, err := st.CreateUser(context.Background(), "Test User", email, "", string(hash), false, true)
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}
@@ -605,7 +614,7 @@ func seedAdmin(t *testing.T, st *store.Store, email, password string) store.User
 	if err != nil {
 		t.Fatalf("hash: %v", err)
 	}
-	u, err := st.CreateUser(context.Background(), "Admin", email, "", string(hash), true)
+	u, err := st.CreateUser(context.Background(), "Admin", email, "", string(hash), true, true)
 	if err != nil {
 		t.Fatalf("create admin: %v", err)
 	}

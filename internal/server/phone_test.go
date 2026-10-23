@@ -161,7 +161,7 @@ func seedUserWithPhone(t *testing.T, st *store.Store, email, phone string) store
 	if err != nil {
 		t.Fatalf("hash: %v", err)
 	}
-	u, err := st.CreateUser(context.Background(), "Test User", email, phone, string(hash), false)
+	u, err := st.CreateUser(context.Background(), "Test User", email, phone, string(hash), false, true)
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}
@@ -526,7 +526,7 @@ func TestAVerifiedNumberNobodyHoldsBecomesAnAccount(t *testing.T) {
 	}
 	// And the address column must still be free for the next phone-only account
 	// rather than taken by an empty string.
-	if _, err := st.CreateUser(context.Background(), "second", "", "+989120000000", "x", false); err != nil {
+	if _, err := st.CreateUser(context.Background(), "second", "", "+989120000000", "x", false, true); err != nil {
 		t.Fatalf("a second account with no email was refused: %v", err)
 	}
 }
