@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"testing"
 
 	"nabuauth/internal/store"
@@ -49,6 +50,11 @@ func TestShippedAppsAreConsistent(t *testing.T) {
 			// on .com; the Iran NabuCRM and NabuPay hosts are the other place
 			// this same client is allowed to return.
 			if app.ID == "nabucrm" && iranNabuCRMRedirects[uri] {
+				continue
+			}
+			// An Iran mirror of the app is the same product on the same path
+			// under nabuxai.ir, and returns to itself (NabuGate deploy/iran).
+			if app.URL != "" && hasPrefix(uri, strings.Replace(app.URL, ".nabuxai.com", ".nabuxai.ir", 1)) {
 				continue
 			}
 			if app.URL != "" && !hasPrefix(uri, app.URL) {
