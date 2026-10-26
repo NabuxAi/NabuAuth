@@ -215,6 +215,9 @@ apps:
     hidden: true
     redirect_uris:
       - https://sms.nabuxai.com/panel/auth/callback
+      # The Iran instance runs the same panel on sms.nabuxai.ir; one client,
+      # one secret, and the sign-in started there returns there.
+      - https://sms.nabuxai.ir/panel/auth/callback
     scopes: [openid, profile, email]
     secret_env: NABUAUTH_SECRET_NABUSMS
 
