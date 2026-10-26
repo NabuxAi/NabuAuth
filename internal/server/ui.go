@@ -439,6 +439,10 @@ type loginView struct {
 	// already carries it — only the error and notice the step answers with.
 	EmailError  string
 	EmailNotice string
+
+	// TelegramCode draws the "send the code with Telegram" button beside the
+	// SMS resend, on deployments whose gateway carries the bot.
+	TelegramCode bool
 }
 
 // renderLogin draws the sign-in page, naming the application that sent the
@@ -478,13 +482,14 @@ func (s *Server) renderLoginView(w http.ResponseWriter, r *http.Request, status 
 		// The phone half exists only where a gateway is configured. A field that
 		// cannot send a code would report one as sent, which is the whole defect
 		// this door is here to not repeat.
-		"Sms":         s.sms != nil,
-		"Countries":   s.cfg.Sms.Countries,
-		"Country":     v.Country,
-		"Phone":       v.Phone,
-		"PhoneError":  v.PhoneError,
-		"PhoneNotice": v.PhoneNotice,
-		"CodeSent":    v.CodeSent,
+		"Sms":          s.sms != nil,
+		"Countries":    s.cfg.Sms.Countries,
+		"TelegramCode": s.cfg.Sms.Telegram,
+		"Country":      v.Country,
+		"Phone":        v.Phone,
+		"PhoneError":   v.PhoneError,
+		"PhoneNotice":  v.PhoneNotice,
+		"CodeSent":     v.CodeSent,
 		// The email-code offer on the password step exists only where a relay is
 		// configured, on the same terms as the phone field.
 		"Mail":        s.mail != nil,

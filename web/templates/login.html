@@ -102,6 +102,19 @@
     <input type="hidden" name="country" value="{{.Country}}">
     <button type="submit" class="ghost small">{{t $.Lang "Send another code"}}</button>
   </form>
+  {{if .TelegramCode}}
+  {{/* A code over Telegram is free, instant, and never meets a do-not-disturb
+       list — the road to offer beside the SMS resend. Where the number holds
+       no Telegram account the send falls back to SMS and this button has only
+       cost the visitor a click. */}}
+  <form method="post" action="/login/phone" class="form resend">
+    <input type="hidden" name="next" value="{{.Next}}">
+    <input type="hidden" name="phone" value="{{.Phone}}">
+    <input type="hidden" name="country" value="{{.Country}}">
+    <input type="hidden" name="via" value="telegram">
+    <button type="submit" class="ghost small">{{t $.Lang "Send the code with Telegram instead"}}</button>
+  </form>
+  {{end}}
   {{end}}
 
   <p class="muted hint"><a href="/login{{if .Next}}?next={{.Next}}{{end}}">{{t $.Lang "Use a different account"}}</a></p>

@@ -57,6 +57,12 @@ func TestShippedAppsAreConsistent(t *testing.T) {
 			if app.URL != "" && hasPrefix(uri, strings.Replace(app.URL, ".nabuxai.com", ".nabuxai.ir", 1)) {
 				continue
 			}
+			// The Iran instances of products whose brand domain is its own
+			// .ir (nabugen.ir, nabusto.ir) return to themselves; same client,
+			// same product, other server.
+			if iranBrandRedirects[uri] {
+				continue
+			}
 			if app.URL != "" && !hasPrefix(uri, app.URL) {
 				t.Errorf("app %q: redirect %q is not on its own origin %q", app.ID, uri, app.URL)
 			}
@@ -70,6 +76,13 @@ func TestShippedAppsAreConsistent(t *testing.T) {
 var iranNabuCRMRedirects = map[string]bool{
 	"https://crm.nabuxai.ir/auth/nabu/callback": true,
 	"https://pay.nabuxai.ir/auth/nabu/callback": true,
+}
+
+// iranBrandRedirects are the callbacks of Iran instances that live on their
+// own brand domain rather than a nabuxai.ir mirror. Listed on purpose, like
+// the NabuCRM ones above.
+var iranBrandRedirects = map[string]bool{
+	"https://nabugen.ir/auth/nabu/callback": true,
 }
 
 // The .com callback has to stay, in the same place, when the Iran callbacks

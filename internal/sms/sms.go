@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -186,6 +187,9 @@ type sendRequest struct {
 	Template string            `json:"template,omitempty"`
 	Params   map[string]string `json:"params,omitempty"`
 	Country  string            `json:"default_country"`
+	// Channel is how the message travels: "sms" (the gateway's default), or a
+	// messenger — "telegram" — whose destination is a chat id, not a number.
+	Channel string `json:"channel,omitempty"`
 }
 
 type sendResponse struct {
@@ -227,6 +231,27 @@ func (c *Client) SendCode(ctx context.Context, e164, code string) error {
 		body.Text = strings.ReplaceAll(c.cfg.Text, "{code}", code)
 	}
 
+	return c.deliver(ctx, body)
+}
+
+// SendCodeTelegram delivers the code to the chat a user already has with the
+// organisation's Telegram bot, through the gateway's telegram channel. It is
+// free per message, never meets a do-not-disturb list, and is why a phone
+// sign-in can work for somebody whose SMS panel is out of credit.
+func (c *Client) SendCodeTelegram(ctx context.Context, chatID int64, code string) error {
+	return c.deliver(ctx, sendRequest{
+		To:      []string{strconv.FormatInt(chatID, 10)},
+		Route:   c.cfg.Route,
+		Text:    strings.ReplaceAll(c.cfg.Text, "{code}", code),
+		Channel: "telegram",
+	})
+}
+
+// deliver posts one send request and reads the only answer that counts: at
+// least one message actually went out. The gateway answers 200 even when the
+// message failed, so the status code alone would let the form claim a code was
+// sent when none was.
+func (c *Client) deliver(ctx context.Context, body sendRequest) error {
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return err
@@ -248,9 +273,6 @@ func (c *Client) SendCode(ctx context.Context, e164, code string) error {
 		return fmt.Errorf("sms gateway returned %s", resp.Status)
 	}
 
-	// The status code only says the gateway accepted the request. Whether a
-	// message went anywhere is in the body, and reading the code alone is
-	// exactly how a form comes to claim a code was sent when none was.
 	var out sendResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return fmt.Errorf("sms gateway returned an unreadable body: %w", err)

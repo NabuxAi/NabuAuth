@@ -43,6 +43,9 @@ server:
 # into the form.
 sms:
   base_url: ${NABUAUTH_SMS_URL}
+  # The gateway carries a Telegram bot and the estate's users already have the
+  # chat open, so the phone form offers the code there too.
+  telegram: true
   key_env: NABUAUTH_SMS_KEY
   route: otp
   international_route: international

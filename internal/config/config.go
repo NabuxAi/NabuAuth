@@ -77,6 +77,11 @@ type Sms struct {
 	Template  string `yaml:"template"`
 	CodeParam string `yaml:"code_param"`
 
+	// Telegram offers the code through the gateway's telegram channel as well:
+	// the sign-in form grows a "send it with Telegram" button beside the SMS
+	// resend. Off on deployments whose gateway has no telegram bot.
+	Telegram bool `yaml:"telegram"`
+
 	// Text is the message body used on the international route, where there are
 	// no patterns. {code} is replaced with the code.
 	Text string `yaml:"text"`

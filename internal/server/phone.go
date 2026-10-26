@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/rand"
 	"errors"
 	"math/big"
@@ -185,7 +186,7 @@ func (s *Server) startPhoneCode(w http.ResponseWriter, r *http.Request, view log
 			fail(http.StatusInternalServerError, "Could not send a code. Try again.")
 			return
 		}
-		if err := s.sms.SendCode(r.Context(), e164, code); err != nil {
+		if err := s.sendPhoneCode(r.Context(), e164, code, r.PostFormValue("via")); err != nil {
 			// The gateway answers 200 even when the message failed, so this is a
 			// real failure and the page must not claim otherwise. The stored code
 			// goes with it, or a retry would be refused by the cooldown.
@@ -360,6 +361,27 @@ func (s *Server) userForPhone(r *http.Request, e164 string) (store.User, error) 
 		return store.User{}, err
 	}
 	return s.store.CreateUser(r.Context(), e164, "", e164, string(hash), count == 0, false)
+}
+
+// sendPhoneCode delivers the code on the road the visitor asked for, falling
+// back to SMS when that road cannot carry it: a number with no Telegram
+// account linked, or a bot that could not reach the chat. The fallback is
+// silent, and so is the road — the notice on the page never names either —
+// because "this number has no Telegram" is the same kind of answer as "this
+// number has no account", and the form does not deal in either.
+func (s *Server) sendPhoneCode(ctx context.Context, e164, code, via string) error {
+	if via == "telegram" {
+		user, err := s.store.UserByPhone(ctx, e164)
+		if err == nil && user.TelegramID != 0 {
+			if terr := s.sms.SendCodeTelegram(ctx, user.TelegramID, code); terr == nil {
+				return nil
+			} else {
+				s.log.Error("send phone code via telegram", "error", terr)
+			}
+		}
+	}
+
+	return s.sms.SendCode(ctx, e164, code)
 }
 
 // phoneUnavailable is what a deployment with no gateway answers on either phone
