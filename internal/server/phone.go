@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
-	"log/slog"
 	"math/big"
 	"net/http"
 	"strings"
@@ -371,7 +370,6 @@ func (s *Server) userForPhone(r *http.Request, e164 string) (store.User, error) 
 // because "this number has no Telegram" is the same kind of answer as "this
 // number has no account", and the form does not deal in either.
 func (s *Server) sendPhoneCode(ctx context.Context, e164, code, via string) error {
-	slog.Info("phone send", "via", via, "e164", e164)
 	if via == "telegram" {
 		user, err := s.store.UserByPhone(ctx, e164)
 		if err == nil && user.TelegramID != 0 {

@@ -17,8 +17,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
-	"net"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -179,18 +177,7 @@ type Client struct {
 
 // New builds a client for a configured gateway.
 func New(cfg config.Sms) *Client {
-	// The dialer logs every address the client actually connects to: a code
-	// delivery that hangs has to be told apart from one that never left, and
-	// the gateway URL in the config is not always where the packets go.
-	dialer := &net.Dialer{Timeout: 5 * time.Second}
-	transport := &http.Transport{
-		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			slog.Info("sms dial", "network", network, "addr", addr)
-			return dialer.DialContext(ctx, network, addr)
-		},
-	}
-
-	return &Client{cfg: cfg, http: &http.Client{Timeout: 10 * time.Second, Transport: transport}}
+	return &Client{cfg: cfg, http: &http.Client{Timeout: 10 * time.Second}}
 }
 
 type sendRequest struct {
