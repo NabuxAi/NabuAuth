@@ -112,6 +112,8 @@ apps:
     badge: Active
     redirect_uris:
       - https://gen.nabuxai.com/auth/nabu/callback
+      # The Iran instance; a sign-in started there returns there.
+      - https://nabugen.ir/auth/nabu/callback
     scopes: [openid, profile, email, wallet, offline]
     secret_env: NABUAUTH_SECRET_NABUGEN
 
