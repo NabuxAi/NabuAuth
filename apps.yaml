@@ -180,6 +180,10 @@ apps:
       - https://pilot.nabuxai.ir/virtual-office/
       - https://pilot.nabuxai.ir/webapp/
       - https://pilot.nabuxai.ir/oauth/callback
+      # The brand-domain Iran instance: same three doors, its own origin.
+      - https://nabupilot.ir/virtual-office/
+      - https://nabupilot.ir/webapp/
+      - https://nabupilot.ir/oauth/callback
     scopes: [openid, profile, email, wallet, offline]
 
   - id: nabuchat
