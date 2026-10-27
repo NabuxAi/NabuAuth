@@ -83,6 +83,11 @@ var iranNabuCRMRedirects = map[string]bool{
 // the NabuCRM ones above.
 var iranBrandRedirects = map[string]bool{
 	"https://nabugen.ir/auth/nabu/callback": true,
+	// nabupilot-office builds its three doors from its own origin, and the
+	// brand-domain Iran instance has its own.
+	"https://nabupilot.ir/virtual-office/": true,
+	"https://nabupilot.ir/webapp/":         true,
+	"https://nabupilot.ir/oauth/callback":  true,
 }
 
 // The .com callback has to stay, in the same place, when the Iran callbacks
