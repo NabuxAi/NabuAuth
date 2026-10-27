@@ -243,6 +243,25 @@ apps:
     scopes: [openid, profile, email, offline]
     secret_env: NABUAUTH_SECRET_NABUCRM
 
+  # The NabuOS phone app: the CRM's screens on a phone. A public client — an
+  # APK on somebody's handset cannot hold a secret, so it signs in by PKCE
+  # (S256, enforced for public clients) and the access token it ends with is
+  # verified by the CRM's own sign-in door, never exchanged against a secret
+  # here. The redirect is the app's custom scheme, which the OS routes to the
+  # app and nothing else. The same client id serves every deployment's app
+  # build: the phone asks its server (com or ir) where to send the person,
+  # and the issuer named there is the one that answers.
+  - id: nabuos
+    name: NabuOS
+    description: The console on a phone — NabuCRM on the go
+    icon: device-phone-mobile
+    url: https://apk.nabuxai.com
+    badge: Active
+    public: true
+    redirect_uris:
+      - nabuos://callback
+    scopes: [openid, profile, email]
+
   # Signs restaurant owners and the platform's staff in to its two panels. A NabuAuth
   # account opens only the Nabusto account it was connected to from inside Nabusto: an
   # email address here is not checked, so it never picks the account on its own.
