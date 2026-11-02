@@ -247,6 +247,19 @@ apps:
     scopes: [openid, profile, email, offline]
     secret_env: NABUAUTH_SECRET_NABUCRM
 
+  # APK build farm and temporary Android test servers. A public PKCE client:
+  # authentication happens in NabuAuth; the hub enforces its own admin allowlist.
+  - id: apkhub
+    name: Nabu APK Hub
+    description: Android builds and on-demand test devices
+    icon: device-phone-mobile
+    url: https://apk.nabuxai.com
+    hidden: true
+    public: true
+    redirect_uris:
+      - https://apk.nabuxai.com/auth/callback
+    scopes: [openid, profile, email]
+
   # The NabuOS phone app: the CRM's screens on a phone. A public client — an
   # APK on somebody's handset cannot hold a secret, so it signs in by PKCE
   # (S256, enforced for public clients) and the access token it ends with is

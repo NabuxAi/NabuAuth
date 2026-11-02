@@ -17,6 +17,7 @@ registered in `apps.yaml`. That list, and nothing else, is what works today:
 - NabuHub
 - NabuCRM
 - NabuOS
+- Nabu APK Hub
 - Nabusto
 - NabuSms
 - RASAD GCC
