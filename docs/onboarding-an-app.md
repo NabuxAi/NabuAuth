@@ -26,6 +26,7 @@ The apps registered today, and where each one really listens:
 | RASAD GCC | `https://rasad.nabuxai.com/api/auth/nabu/callback`, plus `rasad://oauth` for the native app |
 | Imagen Studio | `https://imagen.nabuxai.com/auth/callback/nabu` |
 | Nabu Rent | `https://rent.nabuxai.com/auth/nabu/callback` |
+| Instagram | `https://ig.nabuxai.com/auth/nabu/callback` |
 
 A redirect the app cannot own — a custom scheme like `rasad://oauth`, or
 `http://localhost:…` for a developer's machine — may be registered, but the

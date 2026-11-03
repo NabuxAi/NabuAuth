@@ -335,6 +335,15 @@ apps:
     scopes: [openid, profile, email]
     secret_env: NABUAUTH_SECRET_NABURENT
 
+  - id: instagram-mcp
+    name: Instagram
+    description: Instagram accounts for Nabux MCP clients
+    url: https://ig.nabuxai.com
+    redirect_uris:
+      - https://ig.nabuxai.com/auth/nabu/callback
+    scopes: [openid, profile, email]
+    secret_env: NABUAUTH_SECRET_INSTAGRAM_MCP
+
 # Not yet registered, because they have no sign-in callback to register:
 #
 #   nabusu       — no account system at all; it is a local companion talking to
