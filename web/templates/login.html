@@ -31,6 +31,9 @@
              autocapitalize="none" spellcheck="false" required autofocus>
     </label>
     <button type="submit" class="primary">{{t $.Lang "Continue"}}</button>
+    {{if and .TelegramCode .Sms}}
+    <button type="submit" name="via" value="telegram" class="ghost small" data-telegram-code hidden>{{t $.Lang "Send the code with Telegram instead"}}</button>
+    {{end}}
   </form>
 
   {{if .AllowRegistration}}
@@ -70,7 +73,7 @@
     </a>
     {{end}}
     {{if .Telegram}}
-    <a class="provider provider-telegram" href="/login/telegram{{if .Next}}?next={{.Next}}{{end}}">
+    <a class="provider provider-telegram" data-telegram-popup href="/login/telegram{{if .Next}}?next={{.Next}}{{end}}">
       <svg class="provider-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <circle cx="12" cy="12" r="12" fill="#29A9EB"/>
         <path fill="#fff" d="M5.4 11.8 16.9 7.3c.53-.2 1 .13.83.94l-1.96 9.23c-.14.66-.53.82-1.08.51l-3-2.21-1.45 1.4c-.16.16-.3.29-.6.29l.21-3.04 5.54-5c.24-.21-.05-.33-.37-.12l-6.85 4.31-2.95-.92c-.64-.2-.65-.64.14-.95z"/>
@@ -79,6 +82,9 @@
     </a>
     {{end}}
   </div>
+  {{if or .Telegram (and .TelegramCode .Sms)}}
+  <script src="/static/telegram-popup.js" defer></script>
+  {{end}}
   {{end}}
 
   {{/* Second step, phone: the code that was just sent. */}}

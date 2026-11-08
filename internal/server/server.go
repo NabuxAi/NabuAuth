@@ -160,11 +160,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /login/email/verify", s.handleEmailCodeVerify)
 	// External sign-in methods, one route pair for every provider a deployment
 	// configures.
-	// Telegram is not an OpenID provider, so it has its own routes; these are
-	// more specific than /login/{provider} and win over it.
+	// Telegram uses the legacy bot-signed flow here rather than our OIDC
+	// provider interface; its routes win over /login/{provider}.
 	mux.HandleFunc("GET /login/telegram", s.handleTelegramStart)
 	mux.HandleFunc("GET /login/telegram/callback", s.handleTelegramReturn)
 	mux.HandleFunc("POST /login/telegram/callback", s.handleTelegramCallback)
+	mux.HandleFunc("GET /login/telegram/complete", s.handleTelegramComplete)
 	mux.HandleFunc("POST /dashboard/telegram/link", s.handleTelegramLink)
 	mux.HandleFunc("POST /dashboard/telegram/unlink", s.handleTelegramUnlink)
 	mux.HandleFunc("GET /login/{provider}", s.handleProviderStart)

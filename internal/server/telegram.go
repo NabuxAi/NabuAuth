@@ -24,8 +24,9 @@ import (
 
 // Signing in with Telegram.
 //
-// Telegram is not an OpenID provider, so it is not one of the login_methods.
-// Its login page (oauth.telegram.org) shows the person their own Telegram
+// This service still uses Telegram's legacy bot-signed login, not its newer
+// OpenID Connect authorization-code flow. The login page (oauth.telegram.org)
+// shows the person their own Telegram
 // account, and on approval sends the browser back with the profile in the URL
 // fragment, signed by HMAC-SHA256 under SHA-256 of the bot's token. Checking
 // that signature is the whole proof: anyone holding the token could mint a
@@ -52,6 +53,7 @@ type telegramFlow struct {
 	Nonce string `json:"n"`
 	Mode  string `json:"m"` // "signin" or "link"
 	Next  string `json:"x,omitempty"`
+	Popup bool   `json:"p,omitempty"` // true when started by the popup-enhanced sign-in button
 }
 
 // telegramProfile is the part of Telegram's answer this server keeps.
@@ -171,7 +173,7 @@ func (s *Server) handleTelegramStart(w http.ResponseWriter, r *http.Request) {
 		s.telegramUnavailable(w, r)
 		return
 	}
-	s.leaveForTelegram(w, r, telegramFlow{Mode: "signin", Next: safeNext(r.URL.Query().Get("next"))})
+	s.leaveForTelegram(w, r, telegramFlow{Mode: "signin", Next: safeNext(r.URL.Query().Get("next")), Popup: r.URL.Query().Get("popup") == "1"})
 }
 
 // handleTelegramLink starts the same trip from the account page, to connect a
@@ -263,6 +265,24 @@ func (s *Server) handleTelegramReturn(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleTelegramComplete runs only after the callback has set the NabuAuth
+// session cookie. The popup notifies its original same-origin login tab, which
+// can now resume the original OAuth request without sending credentials to JS.
+func (s *Server) handleTelegramComplete(w http.ResponseWriter, r *http.Request) {
+	next := safeNext(r.URL.Query().Get("next"))
+	if next == "" {
+		next = "/dashboard"
+	}
+	if _, ok := s.currentUser(r); !ok {
+		http.Redirect(w, r, "/login?next="+url.QueryEscape(next), http.StatusFound)
+		return
+	}
+	s.render(w, r, http.StatusOK, "telegram_complete.html", map[string]any{
+		"Title": "Telegram sign-in complete",
+		"Next":  next,
+	})
+}
+
 // handleTelegramCallback checks the signed profile and signs in with it, or
 // connects it to the signed-in account.
 func (s *Server) handleTelegramCallback(w http.ResponseWriter, r *http.Request) {
@@ -332,6 +352,10 @@ func (s *Server) handleTelegramCallback(w http.ResponseWriter, r *http.Request) 
 	next := flow.Next
 	if next == "" {
 		next = "/dashboard"
+	}
+	if flow.Popup {
+		http.Redirect(w, r, "/login/telegram/complete?next="+url.QueryEscape(next), http.StatusFound)
+		return
 	}
 	http.Redirect(w, r, next, http.StatusFound)
 }

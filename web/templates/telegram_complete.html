@@ -1,0 +1,8 @@
+{{define "telegram_complete.html"}}{{template "head" .}}
+<main class="card auth">
+  <h1>{{t $.Lang "Telegram sign-in complete"}}</h1>
+  <p class="muted">{{t $.Lang "You are signed in. This window should close automatically."}}</p>
+  <p><a id="telegram-complete-continue" class="primary" href="{{.Next}}">{{t $.Lang "Continue"}}</a></p>
+</main>
+<script src="/static/telegram-complete.js" defer></script>
+{{template "foot" .}}{{end}}
