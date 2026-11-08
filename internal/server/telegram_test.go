@@ -173,6 +173,52 @@ func TestTelegramSignInCreatesThenReusesTheAccount(t *testing.T) {
 	}
 }
 
+func TestTelegramPopupReturnsToOriginalTabAfterServerSession(t *testing.T) {
+	ts, _, newClient := telegramServer(t)
+	client := newClient()
+	result := signTelegram(t, testBotToken, profileFields(555000777, time.Now()))
+	resp := telegramRoundTrip(t, ts, client, "/login/telegram?popup=1&next=%2Foauth%2Fauthorize%3Fclient_id%3Dtestapp", http.MethodGet, nil, result)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("popup callback returned %d, want redirect", resp.StatusCode)
+	}
+	loc, err := url.Parse(resp.Header.Get("Location"))
+	if err != nil || loc.Path != "/login/telegram/complete" || loc.Query().Get("next") != "/oauth/authorize?client_id=testapp" {
+		t.Fatalf("popup callback returned %q, want same-origin completion with original destination", resp.Header.Get("Location"))
+	}
+
+	completed, err := client.Get(ts.URL + loc.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := readBody(t, completed)
+	completed.Body.Close()
+	if completed.StatusCode != http.StatusOK || !strings.Contains(body, "telegram-complete.js") || !strings.Contains(body, "/oauth/authorize?client_id=testapp") {
+		t.Fatalf("completion page returned %d and body %q", completed.StatusCode, body)
+	}
+
+	dashboard, err := client.Get(ts.URL + "/dashboard")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dashboard.Body.Close()
+	if dashboard.StatusCode != http.StatusOK {
+		t.Fatalf("popup did not start a shared login session; dashboard returned %d", dashboard.StatusCode)
+	}
+}
+
+func TestTelegramPopupCompletionCannotClaimLoginWithoutSession(t *testing.T) {
+	ts, _, newClient := telegramServer(t)
+	resp, err := newClient().Get(ts.URL + "/login/telegram/complete?next=%2Fdashboard")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusFound || !strings.HasPrefix(resp.Header.Get("Location"), "/login?next=") {
+		t.Fatalf("anonymous completion returned %d with location %q", resp.StatusCode, resp.Header.Get("Location"))
+	}
+}
+
 func TestTelegramCallbackNeedsThisBrowsersNonce(t *testing.T) {
 	ts, _, newClient := telegramServer(t)
 	result := signTelegram(t, testBotToken, profileFields(555000222, time.Now()))
