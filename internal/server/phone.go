@@ -76,7 +76,7 @@ func (s *Server) handlePhoneStart(w http.ResponseWriter, r *http.Request) {
 	country := strings.ToUpper(strings.TrimSpace(r.PostFormValue("country")))
 	typed := r.PostFormValue("phone")
 
-	view := loginView{Next: next, Country: country}
+	view := loginView{Next: next, Country: country, Via: viaFrom(r)}
 	fail := func(status int, msg string) {
 		view.PhoneError = msg
 		s.renderLoginView(w, r, status, view)
@@ -101,6 +101,7 @@ func (s *Server) startPhoneCode(w http.ResponseWriter, r *http.Request, view log
 	view.Phone = e164
 	view.Identifier = e164
 	view.Kind = string(kindPhone)
+	view.Via = viaFrom(r)
 
 	fail := func(status int, msg string) {
 		view.PhoneError = msg
@@ -364,12 +365,25 @@ func (s *Server) userForPhone(r *http.Request, e164 string) (store.User, error) 
 }
 
 // sendPhoneCode delivers the code on the road the visitor asked for, falling
-// back to SMS when that road cannot carry it: a number with no Telegram
-// account linked, or a bot that could not reach the chat. The fallback is
-// silent, and so is the road — the notice on the page never names either —
-// because "this number has no Telegram" is the same kind of answer as "this
-// number has no account", and the form does not deal in either.
+// back to SMS when that road cannot carry it: a number Telegram cannot reach, a
+// number with no Telegram account linked, or a bot that could not reach the
+// chat. The fallback is silent, and so is the road — the notice on the page
+// never names either — because "this number has no Telegram" is the same kind
+// of answer as "this number has no account", and the form does not deal in
+// either.
+//
+// Telegram is tried two ways. The gateway route reaches any number held by a
+// Telegram account, so it goes first; the bot chat reaches only an account that
+// has linked Telegram, and stays as the second road for a deployment whose
+// gateway route is down or not configured.
 func (s *Server) sendPhoneCode(ctx context.Context, e164, code, via string) error {
+	if via == "telegram" && s.cfg.Sms.TelegramRoute != "" {
+		err := s.sms.SendCodeTelegramNumber(ctx, e164, code)
+		if err == nil {
+			return nil
+		}
+		s.log.Error("send phone code via telegram gateway", "error", err)
+	}
 	if via == "telegram" {
 		user, err := s.store.UserByPhone(ctx, e164)
 		if err == nil && user.TelegramID != 0 {

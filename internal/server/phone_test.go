@@ -34,6 +34,9 @@ type fakeGateway struct {
 	mu     sync.Mutex
 	sends  []gatewaySend
 	refuse bool
+	// refuseRoute makes one route answer as NabuSms does when every provider
+	// on it refused, leaving the others working.
+	refuseRoute string
 }
 
 type gatewaySend struct {
@@ -71,7 +74,7 @@ func newFakeGateway(t *testing.T) *fakeGateway {
 		for _, to := range body.To {
 			gw.sends = append(gw.sends, gatewaySend{To: to, Route: body.Route, Template: body.Template, Text: body.Text, Params: body.Params})
 		}
-		refuse := gw.refuse
+		refuse := gw.refuse || (gw.refuseRoute != "" && body.Route == gw.refuseRoute)
 		gw.mu.Unlock()
 
 		if refuse {

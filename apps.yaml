@@ -55,6 +55,11 @@ sms:
   # accepts no other name and refuses the message without it — so this only ever
   # needs to name the *extra* placeholder a provider wants.
   code_param: code
+  # The gateway route that hands the code to Telegram for the number itself
+  # (NabuSms's otp-telegram-gateway). Set, the Telegram button asks for a mobile
+  # number and the code arrives in Telegram — no oauth.telegram.org, which Iran
+  # filters. Empty keeps the button on Telegram's own login page.
+  telegram_route: ${NABUAUTH_SMS_TELEGRAM_ROUTE}
   default_country: "98"
   code_ttl: 5m
   resend_after: 60s

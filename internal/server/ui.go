@@ -216,7 +216,20 @@ func (s *Server) handleLoginForm(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, next, http.StatusFound)
 		return
 	}
-	s.renderLogin(w, r, http.StatusOK, next, "", "")
+	s.renderLoginView(w, r, http.StatusOK, loginView{Next: next, Via: viaFrom(r)})
+}
+
+// viaFrom is the road the visitor asked for the code on: "telegram", or empty
+// for the SMS the form sends by default. Anything else is not a road.
+func viaFrom(r *http.Request) string {
+	via := r.PostFormValue("via")
+	if via == "" {
+		via = r.URL.Query().Get("via")
+	}
+	if via == "telegram" {
+		return via
+	}
+	return ""
 }
 
 // handleLoginSubmit takes the identifier and decides what the second step is: a
@@ -241,8 +254,10 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 
 	switch kind {
 	case kindUnknown:
-		s.renderLogin(w, r, http.StatusBadRequest, next, typed,
-			"That is not an email address, a phone number or a username.")
+		s.renderLoginView(w, r, http.StatusBadRequest, loginView{
+			Next: next, Identifier: typed, Email: typed, Via: viaFrom(r),
+			Error: "That is not an email address, a phone number or a username.",
+		})
 
 	case kindPhone:
 		if s.sms == nil {
@@ -443,6 +458,12 @@ type loginView struct {
 	// TelegramCode draws the "send the code with Telegram" button beside the
 	// SMS resend, on deployments whose gateway carries the bot.
 	TelegramCode bool
+
+	// Via is the road the visitor asked for the code on: "telegram" when they
+	// came through the Telegram button, empty for the SMS the form sends by
+	// default. It keeps the first step asking for a mobile number, and the code
+	// step resending the way the first code went.
+	Via string
 }
 
 // renderLogin draws the sign-in page, naming the application that sent the
@@ -484,12 +505,16 @@ func (s *Server) renderLoginView(w http.ResponseWriter, r *http.Request, status 
 		// this door is here to not repeat.
 		"Sms":          s.sms != nil,
 		"Countries":    s.cfg.Sms.Countries,
-		"TelegramCode": s.cfg.Sms.Telegram,
-		"Country":      v.Country,
-		"Phone":        v.Phone,
-		"PhoneError":   v.PhoneError,
-		"PhoneNotice":  v.PhoneNotice,
-		"CodeSent":     v.CodeSent,
+		"TelegramCode": s.cfg.Sms.Telegram || s.cfg.Sms.TelegramRoute != "",
+		// A code to the number over Telegram's own gateway: the Telegram button
+		// then asks for a mobile number rather than opening oauth.telegram.org.
+		"TelegramPhone": s.sms != nil && s.cfg.Sms.TelegramRoute != "",
+		"Via":           v.Via,
+		"Country":       v.Country,
+		"Phone":         v.Phone,
+		"PhoneError":    v.PhoneError,
+		"PhoneNotice":   v.PhoneNotice,
+		"CodeSent":      v.CodeSent,
 		// The email-code offer on the password step exists only where a relay is
 		// configured, on the same terms as the phone field.
 		"Mail":        s.mail != nil,
