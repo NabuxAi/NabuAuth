@@ -20,9 +20,27 @@
   {{if .EmailError}}<p class="alert" role="alert">{{.EmailError}}</p>{{end}}
   {{if and .EmailNotice (not .EmailError)}}<p class="notice">{{.EmailNotice}}</p>{{end}}
 
+  {{/* Signing in with Telegram without Telegram's own login page: the number
+       is the identity, and Telegram's gateway delivers the code to whichever
+       Telegram account holds it. oauth.telegram.org, which the other button
+       opens, is filtered in Iran; this road is not. Reached through the
+       Telegram button, on a deployment whose gateway has the route. */}}
+  {{if and (eq .Kind "") .TelegramPhone (eq .Via "telegram")}}
+  <form method="post" action="/login" class="form">
+    <input type="hidden" name="next" value="{{.Next}}">
+    <input type="hidden" name="via" value="telegram">
+    <label>
+      <span>{{t $.Lang "Mobile number"}}</span>
+      <input type="tel" name="identifier" value="{{.Identifier}}" autocomplete="tel" inputmode="tel" dir="ltr" required autofocus>
+    </label>
+    <button type="submit" class="primary">{{t $.Lang "Send the code to Telegram"}}</button>
+  </form>
+  <p class="muted hint">{{t $.Lang "Write it as you dial it at home, or with a + and the country code. The code arrives in Telegram."}}</p>
+  <p class="muted hint"><a href="/login{{if .Next}}?next={{.Next}}{{end}}">{{t $.Lang "Other ways to sign in"}}</a></p>
+
   {{/* One box. What goes in it decides what the next step asks for, so the
        visitor never has to know which kind of account they have. */}}
-  {{if eq .Kind ""}}
+  {{else if eq .Kind ""}}
   <form method="post" action="/login" class="form">
     <input type="hidden" name="next" value="{{.Next}}">
     <label>
@@ -52,7 +70,7 @@
   <p class="muted hint">{{t $.Lang "A phone number is signed in with a code by SMS. Write it as you dial it at home, or with a + and the country code."}}</p>
   {{end}}
 
-  {{if or .Providers .Telegram}}
+  {{if or .Providers .Telegram .TelegramPhone}}
   <div class="divider"><span>{{t $.Lang "or"}}</span></div>
   <div class="providers">
     {{range .Providers}}
@@ -72,8 +90,10 @@
       <span>{{t $.Lang "Continue with %s" .Name}}</span>
     </a>
     {{end}}
-    {{if .Telegram}}
-    <a class="provider provider-telegram" data-telegram-popup href="/login/telegram{{if .Next}}?next={{.Next}}{{end}}">
+    {{/* With the gateway route the button asks for a mobile number and the code
+         arrives in Telegram; without it, Telegram's own login page opens. */}}
+    {{if or .TelegramPhone .Telegram}}
+    <a class="provider provider-telegram" {{if .TelegramPhone}}href="/login?via=telegram{{if .Next}}&next={{.Next}}{{end}}"{{else}}data-telegram-popup href="/login/telegram{{if .Next}}?next={{.Next}}{{end}}"{{end}}>
       <svg class="provider-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <circle cx="12" cy="12" r="12" fill="#29A9EB"/>
         <path fill="#fff" d="M5.4 11.8 16.9 7.3c.53-.2 1 .13.83.94l-1.96 9.23c-.14.66-.53.82-1.08.51l-3-2.21-1.45 1.4c-.16.16-.3.29-.6.29l.21-3.04 5.54-5c.24-.21-.05-.33-.37-.12l-6.85 4.31-2.95-.92c-.64-.2-.65-.64.14-.95z"/>
@@ -102,13 +122,25 @@
     </label>
     <button type="submit" class="primary">{{t $.Lang "Sign in"}}</button>
   </form>
+  {{if eq .Via "telegram"}}
+  <p class="muted hint">{{t $.Lang "Look for the code in Telegram, in the Verification Codes chat. A number without Telegram gets it by SMS."}}</p>
+  {{end}}
   <form method="post" action="/login/phone" class="form resend">
     <input type="hidden" name="next" value="{{.Next}}">
     <input type="hidden" name="phone" value="{{.Phone}}">
     <input type="hidden" name="country" value="{{.Country}}">
+    {{if eq .Via "telegram"}}<input type="hidden" name="via" value="telegram">{{end}}
     <button type="submit" class="ghost small">{{t $.Lang "Send another code"}}</button>
   </form>
-  {{if .TelegramCode}}
+  {{if eq .Via "telegram"}}
+  {{/* The code went to Telegram; SMS is the other road. */}}
+  <form method="post" action="/login/phone" class="form resend">
+    <input type="hidden" name="next" value="{{.Next}}">
+    <input type="hidden" name="phone" value="{{.Phone}}">
+    <input type="hidden" name="country" value="{{.Country}}">
+    <button type="submit" class="ghost small">{{t $.Lang "Send the code by SMS instead"}}</button>
+  </form>
+  {{else if .TelegramCode}}
   {{/* A code over Telegram is free, instant, and never meets a do-not-disturb
        list — the road to offer beside the SMS resend. Where the number holds
        no Telegram account the send falls back to SMS and this button has only

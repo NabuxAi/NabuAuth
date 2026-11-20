@@ -82,6 +82,15 @@ type Sms struct {
 	// resend. Off on deployments whose gateway has no telegram bot.
 	Telegram bool `yaml:"telegram"`
 
+	// TelegramRoute is the gateway route that delivers the code to the number
+	// itself over Telegram (NabuSms's otp-telegram-gateway, which speaks
+	// Telegram's Gateway API): any number held by a Telegram account, with no
+	// bot chat needed. Set, the Telegram button asks for a mobile number instead
+	// of opening oauth.telegram.org — which Iran filters — and "send it with
+	// Telegram" reaches people who never opened the bot. Empty leaves both as
+	// they were.
+	TelegramRoute string `yaml:"telegram_route"`
+
 	// Text is the message body used on the international route, where there are
 	// no patterns. {code} is replaced with the code.
 	Text string `yaml:"text"`

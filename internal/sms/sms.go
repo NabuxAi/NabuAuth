@@ -247,6 +247,30 @@ func (c *Client) SendCodeTelegram(ctx context.Context, chatID int64, code string
 	})
 }
 
+// SendCodeTelegramNumber delivers the code to the number itself over
+// Telegram, on the gateway route that speaks Telegram's Gateway API: Telegram
+// hands it to whichever account holds the number, in its Verification Codes
+// chat. The code travels as the same pattern parameters the domestic route
+// sends, which is what that route reads.
+func (c *Client) SendCodeTelegramNumber(ctx context.Context, e164, code string) error {
+	params := map[string]string{"token": code}
+	if c.cfg.CodeParam != "" {
+		params[c.cfg.CodeParam] = code
+	}
+	template := c.cfg.Template
+	if template == "" {
+		template = "otp"
+	}
+
+	return c.deliver(ctx, sendRequest{
+		To:       []string{e164},
+		Route:    c.cfg.TelegramRoute,
+		Template: template,
+		Params:   params,
+		Country:  c.cfg.DefaultCountry,
+	})
+}
+
 // deliver posts one send request and reads the only answer that counts: at
 // least one message actually went out. The gateway answers 200 even when the
 // message failed, so the status code alone would let the form claim a code was
