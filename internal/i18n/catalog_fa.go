@@ -187,6 +187,7 @@ var fa = map[string]string{
 	"Brand image and asset studio":                               "استودیوی تصویر و دارایی\u200cهای برند",
 	"Compare cars and prices from nearby rental agencies":        "مقایسهٔ خودروها و قیمت\u200cهای اجاره\u200cدهنده\u200cهای نزدیک",
 	"Instagram accounts for Nabux MCP clients":                   "حساب\u200cهای اینستاگرام برای کلاینت\u200cهای MCP ناباکس",
+	"WhatsApp numbers and campaigns for Nabux MCP clients":       "شماره‌ها و کمپین‌های واتساپ برای کلاینت‌های MCP ناباکس",
 	"Your name and avatar":                                       "نام و تصویر شما",
 	"Read your wallet balance":                                   "دیدن موجودی کیف پول",
 }

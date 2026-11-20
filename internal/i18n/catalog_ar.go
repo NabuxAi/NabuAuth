@@ -187,6 +187,7 @@ var ar = map[string]string{
 	"Brand image and asset studio":                               "استوديو صور العلامة التجارية وأصولها",
 	"Compare cars and prices from nearby rental agencies":        "قارن السيارات والأسعار من وكالات التأجير القريبة",
 	"Instagram accounts for Nabux MCP clients":                   "حسابات إنستغرام لعملاء MCP في نابوكس",
+	"WhatsApp numbers and campaigns for Nabux MCP clients":       "أرقام واتساب وحملاتها لعملاء MCP في نابوكس",
 	"Your name and avatar":                                       "اسمك وصورتك",
 	"Read your wallet balance":                                   "قراءة رصيد محفظتك",
 }
