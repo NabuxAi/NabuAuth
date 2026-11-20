@@ -344,6 +344,15 @@ apps:
     scopes: [openid, profile, email]
     secret_env: NABUAUTH_SECRET_INSTAGRAM_MCP
 
+  - id: whatsapp-mcp
+    name: WhatsApp
+    description: WhatsApp numbers and campaigns for Nabux MCP clients
+    url: https://wa.nabuxai.com
+    redirect_uris:
+      - https://wa.nabuxai.com/auth/nabu/callback
+    scopes: [openid, profile, email]
+    secret_env: NABUAUTH_SECRET_WHATSAPP_MCP
+
 # Not yet registered, because they have no sign-in callback to register:
 #
 #   nabusu       — no account system at all; it is a local companion talking to

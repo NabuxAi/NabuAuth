@@ -24,6 +24,7 @@ registered in `apps.yaml`. That list, and nothing else, is what works today:
 - Imagen Studio
 - Nabu Rent
 - Instagram
+- WhatsApp
 <!-- registered-apps:end -->
 
 The markers are not decoration: a test reads the list between them and compares
