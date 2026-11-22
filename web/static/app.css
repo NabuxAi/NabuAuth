@@ -282,3 +282,9 @@ button, .primary {
 /* Persian and Arabic read better a touch larger and looser than Latin text at
    the same size. */
 html[dir="rtl"] body { line-height: 1.75; font-family: Vazirmatn, ui-sans-serif, system-ui, Tahoma, "Segoe UI", sans-serif; }
+
+/* Nabu, the logo's robot, above the sign-in form (web/static/nabu.js). The tag
+   is empty until the script draws him, so a page without JavaScript loses
+   nothing; once drawn, the canvas keeps its own aspect ratio. */
+ani-doodle.nabu { display: block; position: relative; width: min(12rem, 60%); margin: -1rem auto -.5rem; }
+ani-doodle.nabu:not(:has(canvas)) { display: none; }

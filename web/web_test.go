@@ -69,3 +69,34 @@ func TestTelegramCodeIsOnlyOfferedWhenGatewayEnabled(t *testing.T) {
 		t.Fatal("Telegram code option shown without messaging gateway")
 	}
 }
+
+// Nabu keeps both sign-in pages company: the art is loaded, the fields carry his
+// targets, and a failed attempt sets him fretting.
+func TestNabuKeepsTheSignInCompany(t *testing.T) {
+	templates, err := Templates()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		page string
+		data map[string]any
+		want []string
+	}{
+		{"login.html", map[string]any{"Lang": "fa", "Dir": "rtl", "Kind": ""}, []string{`piece="nabu-form"`, "/static/nabu.js", `data-anidoodle="email"`, `data-anidoodle="submit"`, "نابو، ربات نابو"}},
+		{"login.html", map[string]any{"Lang": "en", "Dir": "ltr", "Kind": "email", "Error": "Wrong password"}, []string{`state="error"`, `data-anidoodle="password"`}},
+		{"register.html", map[string]any{"Lang": "en", "Dir": "ltr", "Open": true}, []string{`piece="nabu-form"`, `data-anidoodle="password"`, `data-anidoodle="submit"`}},
+	} {
+		var out bytes.Buffer
+		if err := templates.ExecuteTemplate(&out, c.page, c.data); err != nil {
+			t.Fatal(err)
+		}
+		for _, wanted := range c.want {
+			if !strings.Contains(out.String(), wanted) {
+				t.Errorf("%s (%v) missing %q", c.page, c.data["Kind"], wanted)
+			}
+		}
+	}
+	if _, err := Static().Open("nabu.js"); err != nil {
+		t.Fatal("the art the page loads is not embedded:", err)
+	}
+}
