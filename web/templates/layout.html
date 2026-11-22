@@ -12,6 +12,18 @@
   <a class="brand" href="/dashboard" dir="ltr"><span class="brand-mark">N</span> Nabu<b>Auth</b></a>
 {{end}}
 
+{{/* Nabu, the logo's robot, keeps the sign-in company (web/static/nabu.js, built from NabuCRM's
+     art by scripts/build-nabu-mascot.sh): he reads along as the identifier is typed, covers his eyes
+     for the password, perks up at the button, frets after a failed attempt. The fields and buttons
+     carry his data-anidoodle targets. He moves only while on screen, keeps still under
+     prefers-reduced-motion, and has a pause button. Without JavaScript the tag is empty and takes no room. */}}
+{{define "nabu"}}
+<ani-doodle piece="nabu-form" class="nabu"{{if or .Error .PhoneError .EmailError}} state="error"{{end}}
+    data-alt="{{t $.Lang "Nabu, the Nabu robot, keeps you company while you sign in."}}"
+    data-label-play="{{t $.Lang "Play animation"}}" data-label-pause="{{t $.Lang "Pause animation"}}"></ani-doodle>
+<script src="/static/nabu.js" defer></script>
+{{end}}
+
 {{define "foot"}}
   <footer class="foot">
     <span>{{t $.Lang "Nabu ecosystem single sign-on"}}</span>

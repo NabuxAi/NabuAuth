@@ -1,5 +1,6 @@
 {{define "register.html"}}{{template "head" .}}
 <main class="card auth">
+  {{template "nabu" .}}
   {{with .App}}
   <div class="app-head">
     <span class="app-mark">{{initials .Name}}</span>
@@ -20,21 +21,21 @@
     <input type="hidden" name="next" value="{{.Next}}">
     <label>
       <span>{{t $.Lang "Name"}}</span>
-      <input type="text" name="name" value="{{.Name}}" autocomplete="name" maxlength="80" required autofocus>
+      <input data-anidoodle="email" type="text" name="name" value="{{.Name}}" autocomplete="name" maxlength="80" required autofocus>
     </label>
     <label>
       <span>{{t $.Lang "Email"}}</span>
-      <input type="email" name="email" value="{{.Email}}" autocomplete="email" dir="ltr" autocapitalize="none" spellcheck="false" required>
+      <input data-anidoodle="email" type="email" name="email" value="{{.Email}}" autocomplete="email" dir="ltr" autocapitalize="none" spellcheck="false" required>
     </label>
     <label>
       <span>{{t $.Lang "Password"}} <em>{{t $.Lang "at least 10 characters"}}</em></span>
-      <input type="password" name="password" autocomplete="new-password" minlength="10" maxlength="72" required>
+      <input data-anidoodle="password" type="password" name="password" autocomplete="new-password" minlength="10" maxlength="72" required>
     </label>
     <label>
       <span>{{t $.Lang "Password again"}}</span>
-      <input type="password" name="confirm" autocomplete="new-password" minlength="10" maxlength="72" required>
+      <input data-anidoodle="password" type="password" name="confirm" autocomplete="new-password" minlength="10" maxlength="72" required>
     </label>
-    <button type="submit" class="primary">{{t $.Lang "Create account"}}</button>
+    <button type="submit" class="primary" data-anidoodle="submit">{{t $.Lang "Create account"}}</button>
   </form>
   {{else}}
   <p class="muted hint">{{t $.Lang "Nabu accounts are created by an administrator. Ask your team to invite you."}}</p>
