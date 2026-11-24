@@ -1,22 +1,115 @@
-{{define "head"}}<!doctype html>
+{{/* The document head every page shares. */}}
+{{define "doc-open"}}<!doctype html>
 <html lang="{{.Lang}}" dir="{{.Dir}}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f6f7fb" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0b0d14" media="(prefers-color-scheme: dark)">
   <title>{{.Title}} — NabuAuth</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css">
 </head>
-<body>
+{{end}}
+
+{{/* The Nabu mark: one drawing for the wordmark, the favicon and the pairing
+     beside an app's mark. */}}
+{{define "nabumark"}}<svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="9" fill="#4f46e5"/><path d="M10.5 22V10.5l11 11V10" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>{{end}}
+
+{{define "wordmark"}}<a class="brand" href="/" dir="ltr">{{template "nabumark"}}<span class="brand-word">Nabu<b>Auth</b></span></a>{{end}}
+
+{{/* Account pages: the dashboard and the admin screens. */}}
+{{define "head"}}{{template "doc-open" .}}
+<body class="page">
 <div class="shell">
-  <a class="brand" href="/dashboard" dir="ltr"><span class="brand-mark">N</span> Nabu<b>Auth</b></a>
+  <header class="shell-top">{{template "wordmark" .}}</header>
+{{end}}
+
+{{define "foot"}}
+  <footer class="foot">
+    <span>{{t $.Lang "Nabu ecosystem single sign-on"}}</span>
+    {{template "langs" .}}
+    <a href="{{.Issuer}}/.well-known/openid-configuration">{{t $.Lang "OpenID configuration"}}</a>
+  </footer>
+</div>
+</body>
+</html>
+{{end}}
+
+{{/* Each language is a link to this same page with ?lang=, which also
+     remembers the choice. Named in its own language, so somebody who cannot
+     read the current one can still find theirs. */}}
+{{define "langs"}}<nav class="langs" aria-label="{{t $.Lang "Language"}}">{{range .LangLinks}}{{if .Current}}<b lang="{{.Code}}" aria-current="true">{{.Name}}</b>{{else}}<a href="{{.URL}}" lang="{{.Code}}" hreflang="{{.Code}}">{{.Name}}</a>{{end}}{{end}}</nav>{{end}}
+
+{{/* The sign-in screens: sign in, create an account, approve, the code steps,
+     Telegram and errors. Two halves on a desktop — the ecosystem on one side,
+     the one thing to do on the other — and one column on a phone, where the
+     ecosystem half is left out and the wordmark heads the form. */}}
+{{define "auth-head"}}{{template "doc-open" .}}
+<body class="auth-body">
+<a class="skip" href="#main">{{t $.Lang "Skip to the form"}}</a>
+<div class="auth-split">
+  <aside class="auth-aside" aria-label="{{t $.Lang "The Nabu ecosystem"}}">
+    <div class="aside-inner">
+      {{template "wordmark" .}}
+      <div class="aside-copy">
+        <p class="eyebrow">{{t $.Lang "Single sign-on"}}</p>
+        <p class="aside-title">{{t $.Lang "One account for the whole Nabux ecosystem"}}</p>
+        <p class="aside-lead">{{t $.Lang "Sign in once and every Nabu app and MCP gateway knows it is you. Nothing is shared with an app until you approve it."}}</p>
+      </div>
+      {{with .Ecosystem}}
+      <div class="eco">
+        {{if .Apps}}
+        <p class="eco-label">{{t $.Lang "Opens with this account"}}</p>
+        <ul class="eco-grid">
+          {{range .Apps}}<li{{if .Current}} class="is-current"{{end}}>{{template "appmark" .}}<span class="eco-name" dir="auto">{{.Name}}</span></li>{{end}}
+          {{if .More}}<li class="eco-more"><span>{{t $.Lang "+%d more" .More}}</span></li>{{end}}
+        </ul>
+        {{end}}
+        {{if .Gateways}}
+        <p class="eco-label">{{t $.Lang "MCP gateways"}}</p>
+        <ul class="eco-row">
+          {{range .Gateways}}<li{{if .Current}} class="is-current"{{end}} title="{{.Name}}">{{template "appmark" .}}<span class="sr-only">{{.Name}}</span></li>{{end}}
+        </ul>
+        {{end}}
+      </div>
+      {{end}}
+      <div class="aside-end">
+        {{template "nabu" .}}
+        <p class="aside-foot">
+          <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 1.8 3.5 4.3v5c0 4.2 2.8 7.4 6.5 8.9 3.7-1.5 6.5-4.7 6.5-8.9v-5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="m7.2 10 2 2 3.8-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span dir="ltr">OpenID Connect · OAuth 2.0 · PKCE</span>
+        </p>
+      </div>
+    </div>
+  </aside>
+  <div class="auth-col">
+    <header class="auth-top">{{template "wordmark" .}}</header>
+    <main id="main" class="auth-main" tabindex="-1">
+{{end}}
+
+{{define "auth-foot"}}
+    </main>
+    <footer class="auth-foot">
+      {{template "langs" .}}
+      <a href="{{.Issuer}}/.well-known/openid-configuration">{{t $.Lang "OpenID configuration"}}</a>
+    </footer>
+  </div>
+</div>
+</body>
+</html>
 {{end}}
 
 {{/* Nabu, the logo's robot, keeps the sign-in company (web/static/nabu.js, built from NabuCRM's
      art by scripts/build-nabu-mascot.sh): he reads along as the identifier is typed, covers his eyes
      for the password, perks up at the button, frets after a failed attempt. The fields and buttons
-     carry his data-anidoodle targets. He moves only while on screen, keeps still under
-     prefers-reduced-motion, and has a pause button. Without JavaScript the tag is empty and takes no room. */}}
+     carry his data-anidoodle targets wherever they sit on the page. He lives in the ecosystem half,
+     so a phone — which has no room for that half — shows the form alone. He moves only while on
+     screen, keeps still under prefers-reduced-motion, and his pause control stays out of the way
+     until it is hovered or reached with the keyboard. Without JavaScript the tag is empty and takes
+     no room. */}}
 {{define "nabu"}}
 <ani-doodle piece="nabu-form" class="nabu"{{if or .Error .PhoneError .EmailError}} state="error"{{end}}
     data-alt="{{t $.Lang "Nabu, the Nabu robot, keeps you company while you sign in."}}"
@@ -24,18 +117,7 @@
 <script src="/static/nabu.js" defer></script>
 {{end}}
 
-{{define "foot"}}
-  <footer class="foot">
-    <span>{{t $.Lang "Nabu ecosystem single sign-on"}}</span>
-    {{/* Each language is a link to this same page with ?lang=, which also
-         remembers the choice. Named in its own language, so somebody who cannot
-         read the current one can still find theirs. */}}
-    <nav class="langs" aria-label="{{t $.Lang "Language"}}">
-      {{range .LangLinks}}{{if .Current}}<b lang="{{.Code}}">{{.Name}}</b>{{else}}<a href="{{.URL}}" lang="{{.Code}}" hreflang="{{.Code}}">{{.Name}}</a>{{end}}{{end}}
-    </nav>
-    <a href="{{.Issuer}}/.well-known/openid-configuration">{{t $.Lang "OpenID configuration"}}</a>
-  </footer>
-</div>
-</body>
-</html>
-{{end}}
+{{/* The top of a sign-in card that knows which app sent the visitor: that
+     app's mark beside Nabu's, then whose account is asked for and where it
+     leads. */}}
+{{define "app-pair"}}<div class="pair" aria-hidden="true">{{template "appmark" .}}<span class="pair-dots"><i></i><i></i><i></i></span>{{template "nabumark"}}</div>{{end}}

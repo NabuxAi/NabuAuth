@@ -340,9 +340,19 @@ apps:
     scopes: [openid, profile, email]
     secret_env: NABUAUTH_SECRET_NABURENT
 
+  # The MCP gateways: each one puts a platform's accounts in front of MCP
+  # clients (Claude, ChatGPT, …) and signs its panel in here. `brand` draws the
+  # platform's mark on the sign-in page; it is optional and checked against
+  # config.Brands. `first_party: true` skips the approval screen for them — the
+  # grant is recorded as approved, so a silent prompt=none sign-in from one
+  # gateway succeeds on the first visit to the next. Only the gateways carry it. A gateway whose secret variable is not set yet still
+  # registers — NabuAuth warns at boot and only that gateway's token exchange
+  # is refused until the secret arrives.
   - id: instagram-mcp
     name: Instagram
     description: Instagram accounts for Nabux MCP clients
+    brand: instagram
+    first_party: true
     url: https://ig.nabuxai.com
     redirect_uris:
       - https://ig.nabuxai.com/auth/nabu/callback
@@ -352,11 +362,101 @@ apps:
   - id: whatsapp-mcp
     name: WhatsApp
     description: WhatsApp numbers and campaigns for Nabux MCP clients
+    brand: whatsapp
+    first_party: true
     url: https://wa.nabuxai.com
     redirect_uris:
       - https://wa.nabuxai.com/auth/nabu/callback
     scopes: [openid, profile, email]
     secret_env: NABUAUTH_SECRET_WHATSAPP_MCP
+
+  - id: telegram-mcp
+    name: Telegram
+    description: Telegram accounts, chats and channels for Nabux MCP clients
+    brand: telegram
+    first_party: true
+    url: https://tm.nabuxai.com
+    redirect_uris:
+      - https://tm.nabuxai.com/auth/nabu/callback
+    scopes: [openid, profile, email]
+    secret_env: NABUAUTH_SECRET_TELEGRAM_MCP
+
+  - id: facebook-mcp
+    name: Facebook
+    description: Facebook Pages and Messenger for Nabux MCP clients
+    brand: facebook
+    first_party: true
+    url: https://fb.nabuxai.com
+    redirect_uris:
+      - https://fb.nabuxai.com/auth/nabu/callback
+    scopes: [openid, profile, email]
+    secret_env: NABUAUTH_SECRET_FACEBOOK_MCP
+
+  - id: x-mcp
+    name: X
+    description: X accounts and posts for Nabux MCP clients
+    brand: x
+    first_party: true
+    url: https://x.nabuxai.com
+    redirect_uris:
+      - https://x.nabuxai.com/auth/nabu/callback
+    scopes: [openid, profile, email]
+    secret_env: NABUAUTH_SECRET_X_MCP
+
+  - id: linkedin-mcp
+    name: LinkedIn
+    description: LinkedIn profiles and pages for Nabux MCP clients
+    brand: linkedin
+    first_party: true
+    url: https://linkedin.nabuxai.com
+    redirect_uris:
+      - https://linkedin.nabuxai.com/auth/nabu/callback
+    scopes: [openid, profile, email]
+    secret_env: NABUAUTH_SECRET_LINKEDIN_MCP
+
+  - id: threads-mcp
+    name: Threads
+    description: Threads accounts and posts for Nabux MCP clients
+    brand: threads
+    first_party: true
+    url: https://threads.nabuxai.com
+    redirect_uris:
+      - https://threads.nabuxai.com/auth/nabu/callback
+    scopes: [openid, profile, email]
+    secret_env: NABUAUTH_SECRET_THREADS_MCP
+
+  - id: youtube-mcp
+    name: YouTube
+    description: YouTube channels and videos for Nabux MCP clients
+    brand: youtube
+    first_party: true
+    url: https://youtube.nabuxai.com
+    redirect_uris:
+      - https://youtube.nabuxai.com/auth/nabu/callback
+    scopes: [openid, profile, email]
+    secret_env: NABUAUTH_SECRET_YOUTUBE_MCP
+
+  - id: snapchat-mcp
+    name: Snapchat
+    description: Snapchat accounts and stories for Nabux MCP clients
+    brand: snapchat
+    first_party: true
+    url: https://snap.nabuxai.com
+    redirect_uris:
+      - https://snap.nabuxai.com/auth/nabu/callback
+    scopes: [openid, profile, email]
+    secret_env: NABUAUTH_SECRET_SNAPCHAT_MCP
+
+  - id: social-mcp
+    name: Social
+    description: Every social account in one place for Nabux MCP clients
+    brand: social
+    first_party: true
+    url: https://social.nabuxai.com
+    redirect_uris:
+      - https://social.nabuxai.com/auth/nabu/callback
+    scopes: [openid, profile, email]
+    secret_env: NABUAUTH_SECRET_SOCIAL_MCP
 
 # Not yet registered, because they have no sign-in callback to register:
 #

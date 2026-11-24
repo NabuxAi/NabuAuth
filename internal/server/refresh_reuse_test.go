@@ -24,10 +24,11 @@ func TestRefreshReuseRevokesTheWholeFamily(t *testing.T) {
 	seedUser(t, st, "user@nabuxai.com", "correct-horse-battery")
 	client := signIn(t, ts, "user@nabuxai.com", "correct-horse-battery")
 
-	code := grantCode(t, ts, client, "testapp", "http://app.test/callback", "openid profile", "", "")
+	code := grantCode(t, ts, client, "testapp", "http://app.test/callback", "openid profile", pkceChallenge, "S256")
 	tok := postForm(t, ts, "/oauth/token", url.Values{
 		"grant_type":    {"authorization_code"},
 		"code":          {code},
+		"code_verifier": {pkceVerifier},
 		"redirect_uri":  {"http://app.test/callback"},
 		"client_id":     {"testapp"},
 		"client_secret": {"test-confidential-secret"},

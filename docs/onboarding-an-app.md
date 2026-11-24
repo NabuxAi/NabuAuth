@@ -27,6 +27,15 @@ The apps registered today, and where each one really listens:
 | Imagen Studio | `https://imagen.nabuxai.com/auth/callback/nabu` |
 | Nabu Rent | `https://rent.nabuxai.com/auth/nabu/callback` |
 | Instagram | `https://ig.nabuxai.com/auth/nabu/callback` |
+| WhatsApp | `https://wa.nabuxai.com/auth/nabu/callback` |
+| Telegram | `https://tm.nabuxai.com/auth/nabu/callback` |
+| Facebook | `https://fb.nabuxai.com/auth/nabu/callback` |
+| X | `https://x.nabuxai.com/auth/nabu/callback` |
+| LinkedIn | `https://linkedin.nabuxai.com/auth/nabu/callback` |
+| Threads | `https://threads.nabuxai.com/auth/nabu/callback` |
+| YouTube | `https://youtube.nabuxai.com/auth/nabu/callback` |
+| Snapchat | `https://snap.nabuxai.com/auth/nabu/callback` |
+| Social | `https://social.nabuxai.com/auth/nabu/callback` |
 
 A redirect the app cannot own — a custom scheme like `rasad://oauth`, or
 `http://localhost:…` for a developer's machine — may be registered, but the
@@ -60,6 +69,47 @@ displays a balance asks for `wallet`.
 Add `public: true` for a client that cannot keep a secret (a SPA or mobile app);
 it then must use PKCE and cannot use `client_credentials`. Add `hidden: true` to
 keep a service client out of the dashboard launcher.
+
+Two optional fields shape the sign-in screens:
+
+- `brand:` — one of `telegram`, `whatsapp`, `instagram`, `facebook`, `x`,
+  `linkedin`, `threads`, `youtube`, `snapchat`, `social` (`config.Brands`). It
+  draws that platform's mark beside the app's name; any other value is refused
+  at boot.
+- `first_party: true` — skips the approval screen. Default `false`; YAML
+  refuses a value that is not a boolean.
+
+### `first_party`: approved by signing in
+
+A first-party app is one the Nabu organisation runs itself, where signing in to
+Nabu already is the person's choice to use it. For such an app,
+`/oauth/authorize` records the grant as if the approval screen had been
+answered and goes straight back with a code. That is what makes "sign in once,
+every MCP gateway opens" work: a gateway's silent `prompt=none` request
+succeeds on the **first** visit, not only after a one-time approval.
+
+What it does not change:
+
+- The `redirect_uri` must still match a registered one exactly, and PKCE is
+  still required wherever it was (public clients, non-https redirects). Those
+  checks run before consent is considered.
+- With no Nabu session, `prompt=none` is still `login_required`.
+- `prompt=consent` still shows the screen.
+- The grant is a real, recorded one: it appears on the person's dashboard and
+  can be disconnected there, which revokes that app's refresh tokens and so
+  signs the person out of it. The next sign-in to the app records the grant
+  again: disconnecting a first-party app signs out of it, it does not block it.
+
+Today only the MCP gateways carry it (`instagram-mcp`, `whatsapp-mcp`,
+`telegram-mcp`, `facebook-mcp`, `x-mcp`, `linkedin-mcp`, `threads-mcp`,
+`youtube-mcp`, `snapchat-mcp`, `social-mcp`), and a test keeps it that way.
+Turning it on for another app is a decision that the app's scopes need no
+separate approval — make it deliberately, and never for an app that asks for
+`wallet.write`.
+
+For any app that is not first-party, a silent sign-in works the same way once
+the person has approved it: `prompt=none` returns a code, and before that it
+returns `consent_required`, after which the app redirects interactively.
 
 ## 3. Generate the secret
 

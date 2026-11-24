@@ -127,3 +127,50 @@ to be able to sign themselves up. Unset still reads as closed, which is the
 behaviour that shipped before — the sign-in form then refuses unknown emails
 with the same wording as a wrong password, and accounts come from `/admin/users`
 or the CLI.
+
+### 2026-11-24 — the MCP gateways, silent sign-in, and a sign-in screen that looks the part
+
+**Ten MCP gateways are registered**: the existing Instagram and WhatsApp, plus
+Telegram (`tm.`), Facebook (`fb.`), X (`x.`), LinkedIn (`linkedin.`), Threads
+(`threads.`), YouTube (`youtube.`), Snapchat (`snap.`) and Social (`social.`),
+each at `https://<host>.nabuxai.com/auth/nabu/callback` with
+`[openid, profile, email]` and its own `NABUAUTH_SECRET_<APP>_MCP`. A gateway
+whose secret is not set yet does not stop the server — that was already true
+(`SyncApps` warns and keeps going) and is now covered by a test.
+
+**`prompt` is a set, and `prompt=login` no longer loops.** `prompt=none` already
+answered `login_required` / `consent_required` at the app's callback; now there
+are tests for it, and `none` combined with another value is `invalid_request`.
+`prompt=login` used to end the session and send the visitor to `/login` with a
+`next` that still said `prompt=login` — so signing in came back, ended the new
+session and went round again, for ever. The `next` now drops `login`. "Not
+you?" on the approval screen repeats the whole request with `prompt=login`
+instead of a bare `client_id`, which only worked for apps with one redirect URI.
+
+**The sign-in screens were redrawn**: a split layout on a desktop (the
+ecosystem — the apps one account opens and the MCP gateways' marks — on the
+ink-coloured side, the form on the other), one column on a phone; the app being
+signed in to named in the heading with its platform mark beside Nabu's; a
+reminder chip of who is signing in on every second step; one-time-code fields
+that look like codes; light and dark; Vazirmatn embedded for Persian and Arabic
+(Arabic-script subset only, 46 KB). Nabu the robot stays, in the ecosystem half,
+with his pause control faint until hovered or focused. Every URL, form field and
+flow is unchanged. Apps can carry an optional, validated `brand:`.
+
+**The gateways are `first_party: true`** (new optional bool, default false):
+`/oauth/authorize` skips the approval screen for them and records the grant as
+approved, so `prompt=none` from a gateway succeeds on the first visit — "sign
+in once, every MCP opens". Redirect matching and PKCE are unchanged and run
+first; every other app still needs its one approval.
+
+Also fixed on the way: three integration tests had been failing on `main` since
+the rule that a non-https redirect needs PKCE — they now send a verifier.
+
+## Needs you
+
+Set these on the NabuAuth deployment (and the same value in each gateway):
+`NABUAUTH_SECRET_TELEGRAM_MCP`, `NABUAUTH_SECRET_FACEBOOK_MCP`,
+`NABUAUTH_SECRET_X_MCP`, `NABUAUTH_SECRET_LINKEDIN_MCP`,
+`NABUAUTH_SECRET_THREADS_MCP`, `NABUAUTH_SECRET_YOUTUBE_MCP`,
+`NABUAUTH_SECRET_SNAPCHAT_MCP`, `NABUAUTH_SECRET_SOCIAL_MCP`
+(`openssl rand -base64 32` each), then redeploy.

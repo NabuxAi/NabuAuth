@@ -299,6 +299,48 @@ type App struct {
 	// Hidden keeps an app out of the dashboard launcher while still letting it
 	// authenticate — for internal service clients.
 	Hidden bool `yaml:"hidden"`
+
+	// Brand names the platform an app speaks for — one of Brands — so the
+	// sign-in page can show that platform's mark and colour beside the app's
+	// name. Optional; an app without one is drawn with its initials. Checked
+	// against the list at load, because an unknown value would quietly draw
+	// nothing and look like a broken page rather than a typo.
+	Brand string `yaml:"brand"`
+
+	// FirstParty marks an app the Nabu organisation runs itself and whose
+	// access the person already chose by signing in to Nabu: the approval
+	// screen is skipped and the grant recorded as if approved, so a silent
+	// prompt=none sign-in succeeds on the very first visit. The redirect URI
+	// match and PKCE rules are unchanged. Default false; YAML refuses anything
+	// that is not a boolean.
+	FirstParty bool `yaml:"first_party"`
+}
+
+// Brands are the platform marks the sign-in pages know how to draw
+// (web/templates/brand.html). A new one is a new glyph there and a name here.
+var Brands = []string{
+	"telegram", "whatsapp", "instagram", "facebook", "x",
+	"linkedin", "threads", "youtube", "snapchat", "social",
+}
+
+// KnownBrand reports whether a brand is one the pages can draw.
+func KnownBrand(brand string) bool {
+	for _, b := range Brands {
+		if b == brand {
+			return true
+		}
+	}
+	return false
+}
+
+// App finds a registered app by id.
+func (c *Config) App(id string) (App, bool) {
+	for _, a := range c.Apps {
+		if a.ID == id {
+			return a, true
+		}
+	}
+	return App{}, false
 }
 
 // DefaultScopes is used when the config lists none, so a minimal file still
@@ -457,6 +499,9 @@ func (c *Config) validate() error {
 			if _, ok := c.Scopes[s]; !ok {
 				return fmt.Errorf("app %q: unknown scope %q", a.ID, s)
 			}
+		}
+		if a.Brand != "" && !KnownBrand(a.Brand) {
+			return fmt.Errorf("app %q: unknown brand %q (known: %s)", a.ID, a.Brand, strings.Join(Brands, ", "))
 		}
 	}
 	seenProvider := map[string]bool{}

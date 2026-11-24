@@ -1,225 +1,584 @@
-:root {
-  color-scheme: light dark;
-  --bg: #0b0d12;
-  --panel: #141821;
-  --line: #232936;
-  --text: #e8ecf4;
-  --muted: #94a0b5;
-  --accent: #6d8cff;
-  --danger: #ff6b6b;
-  --ok: #4ade80;
-  --radius: 14px;
+/* NabuAuth — the sign-in screens and the account pages.
+   Logical properties only (margin-inline-start, text-align: start), so the
+   same rules serve Persian and Arabic right-to-left and English and Turkish
+   left-to-right. */
+
+/* Persian and Arabic letters only: the unicode-range keeps Latin text on the
+   system font and means a page with no Arabic-script letters never fetches
+   this file. Embedded rather than fetched from a font host, which some of the
+   people this page serves cannot reach. SIL OFL, see vazirmatn.LICENSE.txt. */
+@font-face {
+  font-family: "Nabu Vazirmatn";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url(/static/fonts/vazirmatn-arabic.woff2) format("woff2");
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC;
 }
 
-@media (prefers-color-scheme: light) {
+:root {
+  color-scheme: light;
+  --bg: #f5f6fa;
+  --surface: #ffffff;
+  --surface-2: #f1f3f8;
+  --line: #e3e6ee;
+  --line-strong: #cfd4df;
+  --text: #0f1222;
+  --text-2: #464e63;
+  --muted: #5b6479;
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-text: #4338ca;
+  --accent-soft: #eef0ff;
+  --ring: rgba(79, 70, 229, .28);
+  --danger: #b42335;
+  --danger-soft: #fdeef0;
+  --ok: #137046;
+  --ok-soft: #e8f6ee;
+  --shadow: 0 1px 2px rgba(16, 20, 40, .05), 0 12px 32px -12px rgba(16, 20, 40, .14);
+  --radius: 14px;
+  --radius-sm: 10px;
+  --field-h: 2.875rem;
+  --font: "Nabu Vazirmatn", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
   :root {
-    --bg: #f5f7fb;
-    --panel: #ffffff;
-    --line: #e2e7f0;
-    --text: #131722;
-    --muted: #5d6880;
-    --accent: #3457e8;
+    color-scheme: dark;
+    --bg: #0b0d14;
+    --surface: #121521;
+    --surface-2: #181c2a;
+    --line: #242a3b;
+    --line-strong: #323a50;
+    --text: #eceef6;
+    --text-2: #b7bdcf;
+    --muted: #9aa2b8;
+    --accent: #5b53ee;
+    --accent-hover: #6b64f5;
+    --accent-text: #a8b1ff;
+    --accent-soft: rgba(99, 102, 241, .16);
+    --ring: rgba(129, 140, 248, .45);
+    --danger: #ff8a95;
+    --danger-soft: rgba(255, 99, 115, .12);
+    --ok: #6ee7a8;
+    --ok-soft: rgba(52, 211, 153, .12);
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 16px 40px -16px rgba(0, 0, 0, .7);
   }
 }
 
-* { box-sizing: border-box; }
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 
 body {
   margin: 0;
-  padding: 2.5rem 1.25rem;
   background: var(--bg);
   color: var(--text);
-  font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 15px/1.55 var(--font);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-.shell { max-width: 62rem; margin: 0 auto; }
+/* Persian and Arabic read better a touch larger and looser than Latin text at
+   the same size. */
+html[dir="rtl"] body { font-size: 15.5px; line-height: 1.75; }
+
+a { color: var(--accent-text); text-underline-offset: .18em; }
+a:hover { text-decoration-thickness: 2px; }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+h1 { margin: 0 0 .4rem; font-size: 1.45rem; line-height: 1.3; font-weight: 650; }
+h2 { margin: 0 0 .9rem; font-size: 1.05rem; font-weight: 650; }
+h3 { margin: 0 0 .3rem; font-size: 1rem; font-weight: 650; }
+html[dir="ltr"] h1 { letter-spacing: -.015em; }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+.skip {
+  position: absolute;
+  inset-inline-start: 1rem;
+  top: -4rem;
+  z-index: 10;
+  padding: .6rem 1rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+.skip:not(:focus) { clip-path: inset(50%); box-shadow: none; }
+.skip:focus { top: 1rem; }
+
+/* ------------------------------------------------------------ the wordmark */
 
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: .55rem;
-  margin-bottom: 1.75rem;
-  color: var(--text);
+  gap: .6rem;
+  color: inherit;
   font-weight: 600;
-  letter-spacing: .01em;
+  font-size: 1.02rem;
   text-decoration: none;
 }
-.brand b { font-weight: 700; }
-.brand-mark {
-  display: grid;
-  place-items: center;
-  width: 1.9rem;
-  height: 1.9rem;
-  border-radius: 9px;
-  background: var(--accent);
-  color: #fff;
-  font-weight: 700;
-}
+.brand-mark { width: 2rem; height: 2rem; flex: none; display: block; }
+.brand-word { letter-spacing: -.01em; }
+.brand-word b { font-weight: 750; margin-inline-start: .08em; }
 
-.card, .wide, section {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 1.75rem;
-}
-.card { max-width: 26rem; margin: 0 auto; }
-.wide, section { margin-bottom: 1.25rem; }
-.wide { padding: 0; border: 0; background: none; }
+/* ------------------------------------------------------------ controls */
 
-h1 { margin: 0 0 .35rem; font-size: 1.4rem; }
-h2 { margin: 0 0 .9rem; font-size: 1.05rem; }
-h3 { margin: 0 0 .3rem; font-size: 1rem; }
-
-.sub { margin: 0 0 1.4rem; color: var(--muted); }
-.muted { color: var(--muted); font-size: .9rem; }
-a { color: var(--accent); }
-
-.form { display: grid; gap: .9rem; }
+.form { display: grid; gap: 1rem; }
 .form.row { grid-auto-flow: column; justify-content: end; gap: .6rem; }
-label { display: grid; gap: .35rem; font-size: .88rem; }
-label em { color: var(--muted); font-style: normal; }
+
+label, .field { display: grid; gap: .4rem; font-size: .875rem; font-weight: 550; color: var(--text); }
+label em { color: var(--muted); font-style: normal; font-weight: 400; }
+
 input, select {
-  padding: .65rem .75rem;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: var(--bg);
+  width: 100%;
+  min-height: var(--field-h);
+  padding: .6rem .85rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
   color: var(--text);
   font: inherit;
+  font-size: 1rem; /* 16px keeps iOS from zooming the page on focus */
+  font-weight: 400;
+  transition: border-color .15s, box-shadow .15s;
 }
-input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+input[type="checkbox"] { width: auto; min-height: 0; }
+input:hover, select:hover { border-color: color-mix(in srgb, var(--line-strong) 60%, var(--text)); }
+input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px var(--ring); }
+input:focus-visible, select:focus-visible { outline: none; }
+input::placeholder { color: var(--muted); }
+
+/* A one-time code reads as a code: big, spaced, in figures of equal width. */
+input.otp {
+  font-family: var(--mono);
+  font-size: 1.45rem;
+  letter-spacing: .45em;
+  text-align: center;
+  padding-inline-start: 1.2rem;
+  font-variant-numeric: tabular-nums;
+}
 
 /* The country selector and the number are one control split in two, so they
-   have to line up as one. Without this the native select keeps its own height
-   and sits a few pixels off the input beside it. */
-.phone-field {
-  display: grid;
-  grid-template-columns: minmax(7.5rem, auto) 1fr;
-  gap: .5rem;
-}
-.phone-field select {
-  min-width: 0;
-  text-overflow: ellipsis;
-}
+   have to line up as one. */
+.phone-field { display: grid; grid-template-columns: minmax(7.5rem, auto) 1fr; gap: .5rem; }
+.phone-field select { min-width: 0; text-overflow: ellipsis; }
 .phone-field input { min-width: 0; }
-.form.resend { margin-top: .6rem; justify-items: start; }
-.auth .form.resend button { width: auto; }
+@media (max-width: 26rem) { .phone-field { grid-template-columns: 1fr; } }
 
-@media (max-width: 26rem) {
-  .phone-field { grid-template-columns: 1fr; }
-}
-
-.auth button[hidden] { display: none; }
-
-button, .primary {
-  padding: .65rem 1.05rem;
+button, .primary, .ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  min-height: 2.5rem;
+  padding: .55rem 1.05rem;
   border: 1px solid transparent;
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   font: inherit;
+  font-size: .95rem;
   font-weight: 600;
+  line-height: 1.2;
   cursor: pointer;
   text-decoration: none;
-  display: inline-block;
+  transition: background-color .15s, border-color .15s, color .15s, transform .1s;
 }
-.primary { background: var(--accent); color: #fff; }
-.ghost { background: transparent; border-color: var(--line); color: var(--text); }
-.small { padding: .4rem .8rem; font-size: .85rem; }
+button:active, .primary:active, .ghost:active { transform: translateY(1px); }
+button[hidden] { display: none; }
 
-.alert {
-  margin: 0 0 1rem;
-  padding: .6rem .8rem;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--danger) 15%, transparent);
-  color: var(--danger);
-  font-size: .9rem;
+.primary { background: var(--accent); color: #fff; box-shadow: 0 1px 2px rgba(30, 27, 100, .25), inset 0 1px 0 rgba(255, 255, 255, .12); }
+.primary:hover { background: var(--accent-hover); color: #fff; text-decoration: none; }
+.ghost { background: var(--surface); border-color: var(--line-strong); color: var(--text); }
+.ghost:hover { background: var(--surface-2); text-decoration: none; }
+.small { min-height: 2.125rem; padding: .35rem .8rem; font-size: .85rem; }
+.block { display: flex; width: 100%; }
+
+/* A button that reads as a link: the quieter second choices under a form. */
+button.link {
+  min-height: 0;
+  padding: .2rem .1rem;
+  border: 0;
+  background: none;
+  color: var(--accent-text);
+  font-weight: 550;
+  font-size: .875rem;
+}
+button.link:hover { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: .18em; }
+button.link:active { transform: none; }
+
+.alert, .notice {
+  display: flex;
+  gap: .55rem;
+  margin: 0 0 1.1rem;
+  padding: .7rem .85rem;
+  border-radius: var(--radius-sm);
+  font-size: .875rem;
+  line-height: 1.5;
+}
+.alert { background: var(--danger-soft); color: var(--danger); border: 1px solid color-mix(in srgb, var(--danger) 22%, transparent); }
+.notice { background: var(--ok-soft); color: var(--ok); border: 1px solid color-mix(in srgb, var(--ok) 22%, transparent); }
+.notice.err { background: var(--danger-soft); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 22%, transparent); }
+.alert a, .notice a { color: inherit; font-weight: 600; }
+
+.muted { color: var(--muted); font-size: .9rem; }
+.sub { margin: 0 0 1.5rem; color: var(--text-2); }
+
+/* ============================================================ sign-in screens */
+
+.auth-body { min-height: 100vh; min-height: 100dvh; }
+
+.auth-split {
+  display: grid;
+  grid-template-columns: minmax(23rem, 42%) 1fr;
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
-/* The sign-in and approval screens. They are the first thing anybody sees of
-   the ecosystem, and they are shown under an app's name — so they get a little
-   more room and a header naming that app. */
-.auth { padding: 2rem 1.75rem; box-shadow: 0 18px 40px -28px rgba(15, 20, 40, .55); }
-.auth h1 { font-size: 1.25rem; line-height: 1.3; }
-.auth .form { margin-top: 1.25rem; }
-.auth button.primary { width: 100%; padding: .75rem 1.05rem; }
-.auth .form.row button.primary, .auth .form.row .ghost { width: auto; }
+/* The ecosystem half: the same ink panel in light and dark, because it is the
+   brand's side of the screen rather than the page's. */
+.auth-aside {
+  position: relative;
+  color: #c9cde3;
+  background:
+    radial-gradient(48rem 34rem at 0% 0%, rgba(99, 102, 241, .34), transparent 62%),
+    radial-gradient(36rem 28rem at 100% 100%, rgba(168, 85, 247, .2), transparent 62%),
+    #0c0e1d;
+  overflow: hidden;
+}
+.auth-aside::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, .075) 1px, transparent 1px);
+  background-size: 22px 22px;
+  -webkit-mask-image: linear-gradient(to bottom, #000, transparent 75%);
+  mask-image: linear-gradient(to bottom, #000, transparent 75%);
+  pointer-events: none;
+}
+.aside-inner {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 2.25rem clamp(2rem, 4vw, 3.5rem) 2rem;
+}
+.auth-aside .brand { color: #fff; }
 
-.app-head { display: flex; align-items: center; gap: .85rem; margin-bottom: 1rem; }
-.app-head .sub { margin: .15rem 0 0; font-size: .88rem; }
-.app-mark {
+.aside-copy { margin-top: clamp(1.5rem, 9vh, 6rem); max-width: 30rem; }
+.eyebrow { margin: 0 0 .9rem; color: #a5b4fc; font-size: .78rem; font-weight: 600; }
+html[dir="ltr"] .eyebrow { text-transform: uppercase; letter-spacing: .1em; }
+.aside-title { margin: 0 0 1rem; color: #fff; font-size: clamp(1.6rem, 2.3vw, 2.15rem); line-height: 1.22; font-weight: 650; text-wrap: balance; }
+html[dir="ltr"] .aside-title { letter-spacing: -.022em; }
+html[dir="rtl"] .aside-title { line-height: 1.45; }
+.aside-lead { margin: 0; color: #b4b9d3; font-size: 1rem; line-height: 1.65; max-width: 28rem; }
+
+.eco { display: grid; gap: .75rem; max-width: 32rem; }
+.eco-label { margin: .5rem 0 0; color: #8f95b5; font-size: .76rem; font-weight: 600; }
+html[dir="ltr"] .eco-label { text-transform: uppercase; letter-spacing: .09em; }
+.eco-grid, .eco-row { margin: 0; padding: 0; list-style: none; }
+.eco-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: .45rem; }
+.eco-grid li {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  min-width: 0;
+  padding: .4rem .55rem .4rem .45rem;
+  border: 1px solid rgba(255, 255, 255, .07);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .035);
+  color: #dfe2f2;
+  font-size: .82rem;
+  font-weight: 500;
+}
+.eco-grid .eco-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eco-grid li.eco-more { justify-content: center; color: #9ca2c2; border-style: dashed; background: none; }
+.eco-grid li.is-current, .eco-row li.is-current { border-color: rgba(165, 180, 252, .7); background: rgba(99, 102, 241, .2); }
+.eco-row { display: flex; flex-wrap: wrap; gap: .3rem; }
+.eco-row li { padding: 2px; border: 1px solid transparent; border-radius: 11px; }
+.eco-row .mark { width: 1.95rem; height: 1.95rem; border-radius: 8px; }
+
+.aside-end { margin-top: auto; display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; }
+.aside-foot { display: flex; align-items: center; gap: .5rem; margin: 0; color: #8f95b5; font-size: .8rem; }
+.aside-foot svg { width: 1.1rem; height: 1.1rem; flex: none; color: #a5b4fc; }
+
+/* The form half. */
+.auth-col { display: flex; flex-direction: column; min-width: 0; min-height: 100vh; min-height: 100dvh; }
+.auth-top { display: none; }
+.auth-main {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 2.5rem 1.5rem;
+}
+.auth-main:focus { outline: none; }
+
+.card {
+  width: 100%;
+  max-width: 25.5rem;
+  padding: 2.25rem 2rem 2rem;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  animation: arrive .32s cubic-bezier(.2, .7, .2, 1) both;
+}
+@keyframes arrive { from { opacity: 0; transform: translateY(6px); } }
+
+.card > h1, .card > .sub { text-align: center; }
+.card > h1 { text-wrap: balance; }
+.card > .gap { height: .9rem; }
+.card > .sub { text-wrap: pretty; }
+
+/* The requesting app's mark beside Nabu's. */
+.pair { display: flex; align-items: center; justify-content: center; gap: .7rem; margin: 0 0 1.25rem; }
+.pair .mark, .pair .brand-mark { width: 3rem; height: 3rem; border-radius: 13px; }
+.pair .mark { font-size: 1.05rem; box-shadow: 0 6px 16px -8px rgba(16, 20, 40, .45); }
+.pair-dots { display: inline-flex; gap: 4px; }
+.pair-dots i { width: 4px; height: 4px; border-radius: 50%; background: var(--line-strong); }
+
+/* App marks: a platform's glyph on its own colour, or initials on the accent
+   tint. */
+.mark {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .01em;
+  line-height: 1;
+  direction: ltr;
+}
+.mark svg { width: 62%; height: 62%; display: block; }
+.auth-aside .mark { background: rgba(129, 140, 248, .16); color: #c7cdff; }
+.auth-aside .mark[class*="mark-"], .pair .mark[class*="mark-"] { color: #fff; }
+.mark.mark-telegram { background: #2aabee; }
+.mark.mark-whatsapp { background: #1fae54; }
+.mark.mark-instagram { background: radial-gradient(circle at 30% 107%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285aeb 90%); }
+.mark.mark-facebook { background: #1877f2; }
+.mark.mark-x, .mark.mark-threads { background: #000; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .16); }
+.mark.mark-linkedin { background: #0a66c2; }
+.mark.mark-youtube { background: #ff0033; }
+.mark.mark-youtube svg { width: 70%; height: 70%; }
+.mark.mark-snapchat { background: #fffc00; }
+.mark.mark-snapchat svg { width: 72%; height: 72%; }
+.mark.mark-social { background: linear-gradient(135deg, #6366f1, #a855f7); }
+.mark[class*="mark-"] { color: #fff; }
+
+/* Who is signing in, on every step after the first: what was typed, and the
+   way back to the first box. */
+.who {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  margin: 0 0 1.25rem;
+  padding: .4rem .5rem .4rem .4rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: .875rem;
+  min-width: 0;
+}
+.who-avatar {
   display: grid;
   place-items: center;
   flex: none;
-  width: 2.75rem;
-  height: 2.75rem;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  color: var(--accent);
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: .72rem;
   font-weight: 700;
-  letter-spacing: .02em;
 }
+.who-avatar svg { width: 1.05rem; height: 1.05rem; }
+.who-id { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
+.who-id b { font-weight: 600; }
+.who-label { color: var(--muted); font-weight: 400; }
+.who-change { flex: none; padding: .15rem .55rem; font-size: .8rem; font-weight: 550; text-decoration: none; }
+.who-change:hover { text-decoration: underline; }
 
-.hint { margin: 1rem 0 0; line-height: 1.5; font-size: .85rem; }
+.field-hint { margin: -.45rem 0 0; color: var(--muted); font-size: .8rem; line-height: 1.5; }
+.hint { margin: 1rem 0 0; color: var(--muted); font-size: .85rem; line-height: 1.55; }
+.hint.centered, .back { text-align: center; }
+.back { margin: 1.25rem 0 0; font-size: .875rem; }
 
-.notice {
-  margin: 0 0 1.25rem;
-  padding: .7rem .85rem;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--ok) 14%, transparent);
-  color: var(--ok);
-  font-size: .88rem;
-}
+.resends { display: flex; flex-wrap: wrap; justify-content: center; gap: .25rem 1.25rem; margin-top: 1rem; }
+.form.resend { display: block; }
 
-.notice.err { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
-.security { max-width: 26rem; }
-.security .muted.small { margin: 0; padding: 0; }
-
-.divider { display: flex; align-items: center; gap: .75rem; margin: 1.35rem 0 1rem; color: var(--muted); font-size: .8rem; }
+.divider { display: flex; align-items: center; gap: .85rem; margin: 1.5rem 0 1.1rem; color: var(--muted); font-size: .78rem; }
 .divider::before, .divider::after { content: ""; height: 1px; flex: 1; background: var(--line); }
 
-.providers { display: grid; gap: .55rem; }
+.providers { display: grid; gap: .6rem; }
 .provider {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: .6rem;
-  padding: .7rem 1.05rem;
-  border: 1px solid var(--line);
-  border-radius: 9px;
+  gap: .65rem;
+  min-height: var(--field-h);
+  padding: .6rem 1rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
   color: var(--text);
   font-weight: 600;
+  font-size: .95rem;
   text-align: center;
   text-decoration: none;
   transition: border-color .15s, background-color .15s;
 }
-.provider:hover { border-color: var(--accent); }
+.provider:hover { background: var(--surface-2); text-decoration: none; }
 
 /* The provider mark keeps its own colours and its own size whatever the theme
    does to the button around it. */
-.provider-mark { width: 18px; height: 18px; flex: 0 0 auto; }
+.provider-mark { width: 18px; height: 18px; flex: none; }
 
 /* Google asks for its button on white with its own grey border, in light and
    in dark alike, so the mark is always on the background it was drawn for. */
 .provider-google { background: #fff; color: #1f1f1f; border-color: #dadce0; }
-.provider-google:hover { background: #f7f8f8; border-color: #d2d5d9; }
+.provider-google:hover { background: #f7f8f8; border-color: #c6c9ce; }
+.provider-telegram { color: var(--text); }
 
-.scopes { margin: 0 0 1.5rem; padding: 0; list-style: none; display: grid; gap: .55rem; }
-.scopes li { display: flex; gap: .55rem; align-items: baseline; }
-.tick { color: var(--ok); font-weight: 700; }
+/* "New to Nabu? Create an account" under the form. */
+.register-cta { display: flex; flex-wrap: wrap; justify-content: center; gap: .35rem; margin: 1.5rem 0 0; padding-top: 1.25rem; border-top: 1px solid var(--line); color: var(--text-2); font-size: .9rem; }
+.register-cta a { font-weight: 600; }
+
+/* The approval screen. */
+.scopes-title { margin: 0 0 .6rem; color: var(--text-2); font-size: .875rem; font-weight: 550; }
+.scopes { margin: 0 0 1.5rem; padding: .35rem 0; list-style: none; border: 1px solid var(--line); border-radius: 12px; }
+.scopes li { display: flex; gap: .65rem; align-items: flex-start; padding: .55rem .9rem; font-size: .925rem; }
+.scopes li + li { border-top: 1px solid var(--line); }
+.tick { width: 1.05rem; height: 1.05rem; flex: none; margin-top: .2em; color: var(--ok); }
+.card .form.row { grid-template-columns: 1fr 1fr; grid-auto-flow: row; }
+
+/* A one-icon status at the top of the error and completion cards. */
+.status-icon { display: grid; place-items: center; width: 3rem; height: 3rem; margin: 0 auto 1rem; border-radius: 50%; background: var(--accent-soft); color: var(--accent-text); }
+.status-icon svg { width: 1.6rem; height: 1.6rem; }
+.status-icon.is-error { background: var(--danger-soft); color: var(--danger); }
+.status-icon.is-ok { background: var(--ok-soft); color: var(--ok); }
+
+.spinner { display: inline-block; width: .9em; height: .9em; vertical-align: -.1em; border: 2px solid var(--line-strong); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.auth-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem 1.5rem;
+  padding: 1.25rem clamp(1.25rem, 3vw, 2.5rem) 1.5rem;
+  color: var(--muted);
+  font-size: .8rem;
+}
+.auth-foot a { color: var(--muted); }
+.auth-foot a:hover { color: var(--text); }
+
+/* Language switcher: each name in its own language, so somebody who cannot
+   read the current page can still find theirs. */
+.langs { display: flex; flex-wrap: wrap; gap: .15rem; }
+.langs a, .langs b { padding: .3rem .6rem; border-radius: 8px; font-size: .8rem; text-decoration: none; }
+.langs a { color: var(--muted); }
+.langs a:hover { background: var(--surface-2); color: var(--text); }
+.langs b { background: var(--surface); border: 1px solid var(--line); color: var(--text); font-weight: 600; }
+
+/* Nabu, the logo's robot, in the ecosystem half (web/static/nabu.js). The tag
+   is empty until the script draws him, so a page without JavaScript loses
+   nothing; once drawn, the canvas keeps its own aspect ratio. His pause control
+   is kept: it stays faint until he is hovered, and appears in full the moment
+   the keyboard reaches it. */
+ani-doodle.nabu { display: block; position: relative; width: 7.25rem; flex: none; margin: 0 0 -.5rem; }
+ani-doodle.nabu:not(:has(canvas)) { display: none; }
+ani-doodle.nabu .ani-doodle-pause {
+  width: 22px !important;
+  height: 22px !important;
+  bottom: 2px !important;
+  border-color: rgba(255, 255, 255, .22) !important;
+  background: rgba(12, 14, 29, .7) !important;
+  color: #c9cde3 !important;
+  font-size: 8px !important;
+  opacity: 0 !important;
+  transition: opacity .2s;
+}
+ani-doodle.nabu:hover .ani-doodle-pause,
+ani-doodle.nabu .ani-doodle-pause:focus-visible,
+ani-doodle.nabu .ani-doodle-pause[aria-pressed="true"] { opacity: .8 !important; }
+ani-doodle.nabu .ani-doodle-pause:focus-visible { outline: 2px solid #a5b4fc; outline-offset: 2px; }
+@media (hover: none) { ani-doodle.nabu .ani-doodle-pause { opacity: .55 !important; } }
+
+/* A narrower desktop: the ecosystem half keeps its message and drops the
+   robot before anything gets cramped. */
+@media (max-width: 75rem) {
+  .aside-end ani-doodle.nabu { display: none; }
+}
+
+/* Tablets and phones: one column. The ecosystem half goes; the wordmark heads
+   the form instead. */
+@media (max-width: 60rem) {
+  .auth-split { grid-template-columns: 1fr; }
+  .auth-aside { display: none; }
+  .auth-top { display: flex; justify-content: center; padding: 1.75rem 1.25rem 0; }
+  .auth-main { place-items: start center; padding: 1.5rem 1.25rem 2rem; }
+  .auth-foot { justify-content: center; text-align: center; }
+}
+
+@media (max-width: 35rem) {
+  .auth-body { background: var(--surface); }
+  .auth-top { justify-content: flex-start; padding: 1.25rem 1rem 0; }
+  .auth-main { padding: 1.75rem 1rem 1.5rem; }
+  .card { max-width: none; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+  .card > h1 { font-size: 1.35rem; }
+  .who-label { display: none; }
+  .auth-foot { padding: 1rem; border-top: 1px solid var(--line); }
+}
+
+/* ============================================================ account pages */
+
+.page { padding: 1.75rem 1.25rem 2.5rem; }
+.shell { max-width: 62rem; margin: 0 auto; }
+.shell-top { margin-bottom: 1.5rem; }
+
+.wide, section {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.5rem 1.75rem;
+}
+.wide, section { margin-bottom: 1.25rem; }
+.wide { padding: 0; border: 0; background: none; }
+.security { max-width: 28rem; }
+.security .muted.small { margin: 0; padding: 0; }
 
 .account {
   display: flex;
   align-items: center;
   gap: 1rem;
-  background: var(--panel);
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 1.25rem 1.75rem;
   margin-bottom: 1.25rem;
 }
-.account h1 { font-size: 1.2rem; }
+.account h1 { font-size: 1.2rem; margin: 0; }
+.account .sub { margin: 0; }
 .account form, .push { margin-inline-start: auto; }
 .avatar {
   display: grid;
   place-items: center;
+  flex: none;
   width: 3rem;
   height: 3rem;
   border-radius: 50%;
@@ -230,61 +589,58 @@ button, .primary {
 }
 .avatar img { width: 100%; height: 100%; object-fit: cover; }
 .badge {
-  padding: .1rem .45rem;
+  padding: .1rem .5rem;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 20%, transparent);
-  color: var(--accent);
-  font-size: .78rem;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: .75rem;
+  font-weight: 600;
 }
 
-.balance { margin: 0 0 .3rem; font-size: 2rem; font-weight: 700; }
+.balance { margin: 0 0 .3rem; font-size: 2rem; font-weight: 700; letter-spacing: -.02em; }
 .balance span { font-size: .95rem; color: var(--muted); font-weight: 500; }
 
-.ledger { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: .88rem; }
-.ledger th, .ledger td { padding: .5rem .4rem; border-bottom: 1px solid var(--line); text-align: start; }
+.ledger { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: .875rem; }
+.ledger th, .ledger td { padding: .55rem .4rem; border-bottom: 1px solid var(--line); text-align: start; }
 .ledger th { color: var(--muted); font-weight: 500; }
 .num { text-align: end; font-variant-numeric: tabular-nums; }
 .debit { color: var(--danger); }
 .credit { color: var(--ok); }
 
-.apps { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); }
-.app { border: 1px solid var(--line); border-radius: 11px; padding: 1rem; }
-.app p { margin: 0 0 .9rem; color: var(--muted); font-size: .88rem; }
+.apps { display: grid; gap: .9rem; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); }
+.app { border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.1rem; background: var(--surface); transition: border-color .15s; }
+.app:hover { border-color: var(--line-strong); }
+.app p { margin: 0 0 .9rem; color: var(--muted); font-size: .875rem; }
 .app-foot { display: flex; gap: .5rem; align-items: center; }
 
 .foot {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
   margin-top: 2rem;
   color: var(--muted);
-  font-size: .82rem;
+  font-size: .8rem;
 }
+.foot a { color: var(--muted); }
 
 @media (max-width: 34rem) {
-  .account { flex-wrap: wrap; }
-  .account form { margin-inline-start: 0; width: 100%; }
+  .account { flex-wrap: wrap; padding: 1.1rem 1.25rem; }
+  .account form, .push { margin-inline-start: 0; width: 100%; }
+  section { padding: 1.25rem; }
   .form.row { grid-auto-flow: row; }
+  .ledger { display: block; overflow-x: auto; }
 }
 
-/* Language switcher: each name in its own language, so somebody who cannot
-   read the current page can still find theirs. */
-.langs { display: flex; flex-wrap: wrap; gap: .25rem .75rem; }
-.langs b { font-weight: 600; color: var(--text); }
+/* ============================================================ motion */
 
-/* "New to Nabu? Create an account" under the one-box form. */
-.register-cta { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin: 1rem 0 0; }
-
-.provider-telegram { color: var(--text); }
-.provider-mark { flex: none; }
-
-/* Persian and Arabic read better a touch larger and looser than Latin text at
-   the same size. */
-html[dir="rtl"] body { line-height: 1.75; font-family: Vazirmatn, ui-sans-serif, system-ui, Tahoma, "Segoe UI", sans-serif; }
-
-/* Nabu, the logo's robot, above the sign-in form (web/static/nabu.js). The tag
-   is empty until the script draws him, so a page without JavaScript loses
-   nothing; once drawn, the canvas keeps its own aspect ratio. */
-ani-doodle.nabu { display: block; position: relative; width: min(12rem, 60%); margin: -1rem auto -.5rem; }
-ani-doodle.nabu:not(:has(canvas)) { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .spinner { animation: none; border-top-color: var(--line-strong); }
+}
