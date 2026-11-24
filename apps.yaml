@@ -467,7 +467,6 @@ apps:
     url: https://ir.nabuxai.ir
     redirect_uris:
       - https://ir.nabuxai.ir/auth/nabu/callback
-      - https://ir.nabuxai.com/auth/nabu/callback
     scopes: [openid, profile, email]
     secret_env: NABUAUTH_SECRET_IRAN_MCP
 
