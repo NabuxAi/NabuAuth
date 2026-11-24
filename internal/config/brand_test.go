@@ -55,9 +55,9 @@ func TestTheMCPGatewaysAreRegistered(t *testing.T) {
 		"telegram-mcp":  "https://tm.nabuxai.com",
 		"facebook-mcp":  "https://fb.nabuxai.com",
 		"x-mcp":         "https://x.nabuxai.com",
-		"linkedin-mcp":  "https://linkedin.nabuxai.com",
-		"threads-mcp":   "https://threads.nabuxai.com",
-		"youtube-mcp":   "https://youtube.nabuxai.com",
+		"linkedin-mcp":  "https://li.nabuxai.com",
+		"threads-mcp":   "https://th.nabuxai.com",
+		"youtube-mcp":   "https://yt.nabuxai.com",
 		"snapchat-mcp":  "https://snap.nabuxai.com",
 		"social-mcp":    "https://social.nabuxai.com",
 	}

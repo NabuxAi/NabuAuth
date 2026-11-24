@@ -408,9 +408,9 @@ apps:
     description: LinkedIn profiles and pages for Nabux MCP clients
     brand: linkedin
     first_party: true
-    url: https://linkedin.nabuxai.com
+    url: https://li.nabuxai.com
     redirect_uris:
-      - https://linkedin.nabuxai.com/auth/nabu/callback
+      - https://li.nabuxai.com/auth/nabu/callback
     scopes: [openid, profile, email]
     secret_env: NABUAUTH_SECRET_LINKEDIN_MCP
 
@@ -419,9 +419,9 @@ apps:
     description: Threads accounts and posts for Nabux MCP clients
     brand: threads
     first_party: true
-    url: https://threads.nabuxai.com
+    url: https://th.nabuxai.com
     redirect_uris:
-      - https://threads.nabuxai.com/auth/nabu/callback
+      - https://th.nabuxai.com/auth/nabu/callback
     scopes: [openid, profile, email]
     secret_env: NABUAUTH_SECRET_THREADS_MCP
 
@@ -430,9 +430,9 @@ apps:
     description: YouTube channels and videos for Nabux MCP clients
     brand: youtube
     first_party: true
-    url: https://youtube.nabuxai.com
+    url: https://yt.nabuxai.com
     redirect_uris:
-      - https://youtube.nabuxai.com/auth/nabu/callback
+      - https://yt.nabuxai.com/auth/nabu/callback
     scopes: [openid, profile, email]
     secret_env: NABUAUTH_SECRET_YOUTUBE_MCP
 
