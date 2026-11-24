@@ -18,6 +18,9 @@
   var popup = null;
   trigger.addEventListener('click', function (event) {
     // Unenhanced navigation remains functional if JS or popups are unavailable.
+    // On mobile use a top-level navigation, so Telegram can hand off to its app
+    // and the external browser can receive the callback without a popup.
+    if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) return;
     event.preventDefault();
     var url = new URL(trigger.href, window.location.href);
     url.searchParams.set('popup', '1');

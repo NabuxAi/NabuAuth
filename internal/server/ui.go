@@ -510,8 +510,7 @@ func (s *Server) renderLoginView(w http.ResponseWriter, r *http.Request, status 
 		"Sms":          s.sms != nil,
 		"Countries":    s.cfg.Sms.Countries,
 		"TelegramCode": s.cfg.Sms.Telegram || s.cfg.Sms.TelegramRoute != "",
-		// A code to the number over Telegram's own gateway: the Telegram button
-		// then asks for a mobile number rather than opening oauth.telegram.org.
+		// Number-based Telegram OTP is a fallback when official Telegram login is available.
 		"TelegramPhone": s.sms != nil && s.cfg.Sms.TelegramRoute != "",
 		"Via":           v.Via,
 		"Country":       v.Country,

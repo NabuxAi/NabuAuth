@@ -58,6 +58,19 @@ func TestTheTelegramButtonAsksForANumberWhenTheGatewayCanCarryTheCode(t *testing
 	}
 }
 
+func TestOfficialTelegramLoginPreferredWhenBothRoutesConfigured(t *testing.T) {
+	t.Setenv("TEST_SMS_KEY", "test-sms-key")
+	gw := newFakeGateway(t)
+	ts, _, _ := telegramServer(t, withTelegramRoute(gw))
+	_, page := getPage(t, ts.URL+"/login?next=/dashboard")
+	if !strings.Contains(page, `data-telegram-popup href="/login/telegram?next=`) {
+		t.Fatal("official Telegram login must be the primary button")
+	}
+	if !strings.Contains(page, `href="/login?via=telegram&next=`) {
+		t.Fatal("number-code fallback must remain available")
+	}
+}
+
 func TestWithoutTheRouteTheTelegramButtonIsUnchanged(t *testing.T) {
 	t.Setenv("TEST_SMS_KEY", "test-sms-key")
 	gw := newFakeGateway(t)
