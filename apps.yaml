@@ -464,8 +464,9 @@ apps:
     name: Iran Messengers
     description: Bale, Eitaa, Rubika, Soroush Plus and Gap bots for Nabux MCP clients
     first_party: true
-    url: https://ir.nabuxai.com
+    url: https://ir.nabuxai.ir
     redirect_uris:
+      - https://ir.nabuxai.ir/auth/nabu/callback
       - https://ir.nabuxai.com/auth/nabu/callback
     scopes: [openid, profile, email]
     secret_env: NABUAUTH_SECRET_IRAN_MCP
