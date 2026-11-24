@@ -82,10 +82,9 @@
       <span>{{t $.Lang "Continue with %s" .Name}}</span>
     </a>
     {{end}}
-    {{/* With the gateway route the button asks for a mobile number and the code
-         arrives in Telegram; without it, Telegram's own login page opens. */}}
+    {{/* Prefer Telegram's own authorization when configured; keep number-based delivery as a separate fallback. */}}
     {{if or .TelegramPhone .Telegram}}
-    <a data-anidoodle="submit" class="provider provider-telegram" {{if .TelegramPhone}}href="/login?via=telegram{{if .Next}}&next={{.Next}}{{end}}"{{else}}data-telegram-popup href="/login/telegram{{if .Next}}?next={{.Next}}{{end}}"{{end}}>
+    <a data-anidoodle="submit" class="provider provider-telegram" {{if .Telegram}}data-telegram-popup href="/login/telegram{{if .Next}}?next={{.Next}}{{end}}"{{else}}href="/login?via=telegram{{if .Next}}&next={{.Next}}{{end}}"{{end}}>
       <svg class="provider-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <circle cx="12" cy="12" r="12" fill="#29A9EB"/>
         <path fill="#fff" d="M5.4 11.8 16.9 7.3c.53-.2 1 .13.83.94l-1.96 9.23c-.14.66-.53.82-1.08.51l-3-2.21-1.45 1.4c-.16.16-.3.29-.6.29l.21-3.04 5.54-5c.24-.21-.05-.33-.37-.12l-6.85 4.31-2.95-.92c-.64-.2-.65-.64.14-.95z"/>
@@ -94,6 +93,9 @@
     </a>
     {{end}}
   </div>
+  {{if and .Telegram .TelegramPhone}}
+  <p class="hint centered"><a href="/login?via=telegram{{if .Next}}&next={{.Next}}{{end}}">{{t $.Lang "Send the code to Telegram"}}</a></p>
+  {{end}}
   {{if or .Telegram (and .TelegramCode .Sms)}}
   <script src="/static/telegram-popup.js" defer></script>
   {{end}}
