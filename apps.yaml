@@ -458,6 +458,18 @@ apps:
     scopes: [openid, profile, email]
     secret_env: NABUAUTH_SECRET_SOCIAL_MCP
 
+  # Iranian messengers (Bale, Eitaa, Rubika, Soroush Plus, Gap) in one gateway,
+  # hosted on the Iran server. No `brand`: there is no single platform mark.
+  - id: iran-mcp
+    name: Iran Messengers
+    description: Bale, Eitaa, Rubika, Soroush Plus and Gap bots for Nabux MCP clients
+    first_party: true
+    url: https://ir.nabuxai.com
+    redirect_uris:
+      - https://ir.nabuxai.com/auth/nabu/callback
+    scopes: [openid, profile, email]
+    secret_env: NABUAUTH_SECRET_IRAN_MCP
+
 # Not yet registered, because they have no sign-in callback to register:
 #
 #   nabusu       — no account system at all; it is a local companion talking to
