@@ -1,7 +1,8 @@
-{{define "error.html"}}{{template "head" .}}
-<main class="card">
+{{define "error.html"}}{{template "auth-head" .}}
+<div class="card">
+  <span class="status-icon is-error" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 7.5v5.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="12" cy="16.3" r="1.1" fill="currentColor"/></svg></span>
   <h1>{{.Title}}</h1>
   <p class="sub">{{.Message}}</p>
-  <p><a class="primary small" href="/dashboard">{{t $.Lang "Back to your account"}}</a></p>
-</main>
-{{template "foot" .}}{{end}}
+  <a class="primary block" href="/dashboard">{{t $.Lang "Back to your account"}}</a>
+</div>
+{{template "auth-foot" .}}{{end}}

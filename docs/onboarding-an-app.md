@@ -27,6 +27,15 @@ The apps registered today, and where each one really listens:
 | Imagen Studio | `https://imagen.nabuxai.com/auth/callback/nabu` |
 | Nabu Rent | `https://rent.nabuxai.com/auth/nabu/callback` |
 | Instagram | `https://ig.nabuxai.com/auth/nabu/callback` |
+| WhatsApp | `https://wa.nabuxai.com/auth/nabu/callback` |
+| Telegram | `https://tm.nabuxai.com/auth/nabu/callback` |
+| Facebook | `https://fb.nabuxai.com/auth/nabu/callback` |
+| X | `https://x.nabuxai.com/auth/nabu/callback` |
+| LinkedIn | `https://linkedin.nabuxai.com/auth/nabu/callback` |
+| Threads | `https://threads.nabuxai.com/auth/nabu/callback` |
+| YouTube | `https://youtube.nabuxai.com/auth/nabu/callback` |
+| Snapchat | `https://snap.nabuxai.com/auth/nabu/callback` |
+| Social | `https://social.nabuxai.com/auth/nabu/callback` |
 
 A redirect the app cannot own — a custom scheme like `rasad://oauth`, or
 `http://localhost:…` for a developer's machine — may be registered, but the

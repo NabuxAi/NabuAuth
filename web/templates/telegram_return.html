@@ -1,5 +1,6 @@
-{{define "telegram_return.html"}}{{template "head" .}}
-<main class="card auth">
+{{define "telegram_return.html"}}{{template "auth-head" .}}
+<div class="card">
+  <span class="status-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="#29A9EB"/><path fill="#fff" d="M5.4 11.8 16.9 7.3c.53-.2 1 .13.83.94l-1.96 9.23c-.14.66-.53.82-1.08.51l-3-2.21-1.45 1.4c-.16.16-.3.29-.6.29l.21-3.04 5.54-5c.24-.21-.05-.33-.37-.12l-6.85 4.31-2.95-.92c-.64-.2-.65-.64.14-.95z"/></svg></span>
   <h1>{{t $.Lang "Signing in with Telegram"}}</h1>
   {{/* Telegram puts the signed profile in the fragment, which only this page
        can read. telegram.js copies it into the form and posts it with the
@@ -7,11 +8,11 @@
   <form method="post" action="/login/telegram/callback" class="form" id="telegram-return">
     <input type="hidden" name="nonce" value="{{.Nonce}}">
     <input type="hidden" name="result" value="">
-    <p class="muted" data-waiting>{{t $.Lang "One moment…"}}</p>
-    <p class="muted" data-cancelled hidden>{{t $.Lang "Telegram did not confirm the sign-in. It may have been cancelled."}}</p>
-    <noscript><p class="muted">{{t $.Lang "This step needs JavaScript. Turn it on, or sign in another way."}}</p></noscript>
+    <p class="sub" data-waiting><span class="spinner" aria-hidden="true"></span> {{t $.Lang "One moment…"}}</p>
+    <p class="alert" data-cancelled hidden>{{t $.Lang "Telegram did not confirm the sign-in. It may have been cancelled."}}</p>
+    <noscript><p class="alert">{{t $.Lang "This step needs JavaScript. Turn it on, or sign in another way."}}</p></noscript>
   </form>
-  <p class="muted hint"><a href="/login{{if .Next}}?next={{.Next}}{{end}}">{{t $.Lang "Back to sign in"}}</a></p>
-</main>
+  <p class="back"><a href="/login{{if .Next}}?next={{.Next}}{{end}}">{{t $.Lang "Back to sign in"}}</a></p>
+</div>
 <script src="/static/telegram.js" defer></script>
-{{template "foot" .}}{{end}}
+{{template "auth-foot" .}}{{end}}

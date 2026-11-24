@@ -1,25 +1,31 @@
-{{define "login.html"}}{{template "head" .}}
-<main class="card auth">
-  {{template "nabu" .}}
-  {{with .App}}
-  <div class="app-head">
-    <span class="app-mark">{{initials .Name}}</span>
-    <div>
-      <h1>{{t $.Lang "Continue to %s" .Name}}</h1>
-      {{if .Description}}<p class="sub">{{.Description}}</p>{{end}}
-    </div>
-  </div>
-  <p class="sub">{{t $.Lang "Sign in with your Nabu account. One account works across every app in the ecosystem."}}</p>
+{{define "login.html"}}{{template "auth-head" .}}
+<div class="card">
+  {{/* The heading says where the sign-in leads when an app sent the visitor,
+       and what this step asks for otherwise. The explanation is for the first
+       step only; after it, the reminder of who is signing in says enough. */}}
+  {{if .App}}
+  {{template "app-pair" .App}}
+  <h1>{{t $.Lang "Sign in to continue to %s" .App.Name}}</h1>
+  {{if eq .Kind ""}}<p class="sub">{{t $.Lang "Use your Nabu account. The same account opens every app in the ecosystem."}}</p>{{end}}
+  {{else if or (eq .Kind "phone") (eq .Kind "email-code")}}
+  <h1>{{t $.Lang "Enter the code"}}</h1>
+  {{else if ne .Kind ""}}
+  <h1>{{t $.Lang "Enter your password"}}</h1>
+  {{else if and .TelegramPhone (eq .Via "telegram")}}
+  <h1>{{t $.Lang "Sign in with Telegram"}}</h1>
+  <p class="sub">{{t $.Lang "One Nabu account for every app in the ecosystem."}}</p>
   {{else}}
   <h1>{{t $.Lang "Sign in"}}</h1>
   <p class="sub">{{t $.Lang "One Nabu account for every app in the ecosystem."}}</p>
   {{end}}
+  {{if ne .Kind ""}}<div class="gap"></div>{{end}}
 
+  {{if .SignedOut}}<p class="notice" role="status">{{t $.Lang "You have signed out of Nabu on this browser."}}</p>{{end}}
   {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
   {{if .PhoneError}}<p class="alert" role="alert">{{.PhoneError}}</p>{{end}}
-  {{if and .PhoneNotice (not .PhoneError)}}<p class="notice">{{.PhoneNotice}}</p>{{end}}
+  {{if and .PhoneNotice (not .PhoneError)}}<p class="notice" role="status">{{.PhoneNotice}}</p>{{end}}
   {{if .EmailError}}<p class="alert" role="alert">{{.EmailError}}</p>{{end}}
-  {{if and .EmailNotice (not .EmailError)}}<p class="notice">{{.EmailNotice}}</p>{{end}}
+  {{if and .EmailNotice (not .EmailError)}}<p class="notice" role="status">{{.EmailNotice}}</p>{{end}}
 
   {{/* Signing in with Telegram without Telegram's own login page: the number
        is the identity, and Telegram's gateway delivers the code to whichever
@@ -30,46 +36,31 @@
   <form method="post" action="/login" class="form">
     <input type="hidden" name="next" value="{{.Next}}">
     <input type="hidden" name="via" value="telegram">
-    <label>
+    <label class="field">
       <span>{{t $.Lang "Mobile number"}}</span>
       <input data-anidoodle="email" type="tel" name="identifier" value="{{.Identifier}}" autocomplete="tel" inputmode="tel" dir="ltr" required autofocus>
     </label>
     <button type="submit" class="primary" data-anidoodle="submit">{{t $.Lang "Send the code to Telegram"}}</button>
   </form>
-  <p class="muted hint">{{t $.Lang "Write it as you dial it at home, or with a + and the country code. The code arrives in Telegram."}}</p>
-  <p class="muted hint"><a href="/login{{if .Next}}?next={{.Next}}{{end}}">{{t $.Lang "Other ways to sign in"}}</a></p>
+  <p class="hint">{{t $.Lang "Write it as you dial it at home, or with a + and the country code. The code arrives in Telegram."}}</p>
+  <p class="back"><a href="/login{{if .Next}}?next={{.Next}}{{end}}">{{t $.Lang "Other ways to sign in"}}</a></p>
 
   {{/* One box. What goes in it decides what the next step asks for, so the
        visitor never has to know which kind of account they have. */}}
   {{else if eq .Kind ""}}
   <form method="post" action="/login" class="form">
     <input type="hidden" name="next" value="{{.Next}}">
-    <label>
+    <label class="field">
       <span>{{t $.Lang "Email, phone number or username"}}</span>
       <input data-anidoodle="email" type="text" name="identifier" value="{{.Identifier}}" autocomplete="username" dir="ltr"
              autocapitalize="none" spellcheck="false" required autofocus>
     </label>
+    {{if .Sms}}<p class="field-hint">{{t $.Lang "A phone number is signed in with a code by SMS. Write it as you dial it at home, or with a + and the country code."}}</p>{{end}}
     <button type="submit" class="primary" data-anidoodle="submit">{{t $.Lang "Continue"}}</button>
     {{if and .TelegramCode .Sms}}
     <button type="submit" name="via" value="telegram" class="ghost small" data-telegram-code hidden>{{t $.Lang "Send the code with Telegram instead"}}</button>
     {{end}}
   </form>
-
-  {{if .AllowRegistration}}
-  {{/* Signing up is its own page with its own button: a newcomer looking for
-       "create account" should find those words, not a hint that typing an
-       unknown email into a sign-in box happens to make one. */}}
-  <p class="register-cta">
-    <span class="muted">{{t $.Lang "New to Nabu?"}}</span>
-    <a class="ghost small" href="/register{{if .Next}}?next={{.Next}}{{end}}">{{t $.Lang "Create an account"}}</a>
-  </p>
-  {{else}}
-  <p class="muted hint">{{t $.Lang "Nabu accounts are created by an administrator. Ask your team to invite you."}}</p>
-  {{end}}
-
-  {{if .Sms}}
-  <p class="muted hint">{{t $.Lang "A phone number is signed in with a code by SMS. Write it as you dial it at home, or with a + and the country code."}}</p>
-  {{end}}
 
   {{if or .Providers .Telegram .TelegramPhone}}
   <div class="divider"><span>{{t $.Lang "or"}}</span></div>
@@ -108,30 +99,43 @@
   {{end}}
   {{end}}
 
+  {{if .AllowRegistration}}
+  {{/* Signing up is its own page with its own button: a newcomer looking for
+       "create account" should find those words, not a hint that typing an
+       unknown email into a sign-in box happens to make one. */}}
+  <p class="register-cta">
+    <span>{{t $.Lang "New to Nabu?"}}</span>
+    <a href="/register{{if .Next}}?next={{.Next}}{{end}}">{{t $.Lang "Create an account"}}</a>
+  </p>
+  {{else}}
+  <p class="hint centered">{{t $.Lang "Nabu accounts are created by an administrator. Ask your team to invite you."}}</p>
+  {{end}}
+
   {{/* Second step, phone: the code that was just sent. */}}
   {{else if eq .Kind "phone"}}
-  <p class="muted hint" dir="ltr">{{.Identifier}}</p>
+  {{template "who" .}}
 
   {{if .CodeSent}}
   <form method="post" action="/login/phone/verify" class="form">
     <input type="hidden" name="next" value="{{.Next}}">
     <input type="hidden" name="phone" value="{{.Phone}}">
     <input type="hidden" name="country" value="{{.Country}}">
-    <label>
-      <span>{{t $.Lang "The code sent to %s" .Phone}}</span>
-      <input data-anidoodle="email" type="text" name="code" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="8" dir="ltr" required autofocus>
+    <label class="field">
+      <span>{{t $.Lang "The code sent to %s" (printf "\u2068%s\u2069" .Phone)}}</span>
+      <input class="otp" data-anidoodle="email" type="text" name="code" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="8" dir="ltr" placeholder="••••••" required autofocus>
     </label>
     <button type="submit" class="primary" data-anidoodle="submit">{{t $.Lang "Sign in"}}</button>
   </form>
   {{if eq .Via "telegram"}}
-  <p class="muted hint">{{t $.Lang "Look for the code in Telegram, in the Verification Codes chat. A number without Telegram gets it by SMS."}}</p>
+  <p class="hint">{{t $.Lang "Look for the code in Telegram, in the Verification Codes chat. A number without Telegram gets it by SMS."}}</p>
   {{end}}
+  <div class="resends">
   <form method="post" action="/login/phone" class="form resend">
     <input type="hidden" name="next" value="{{.Next}}">
     <input type="hidden" name="phone" value="{{.Phone}}">
     <input type="hidden" name="country" value="{{.Country}}">
     {{if eq .Via "telegram"}}<input type="hidden" name="via" value="telegram">{{end}}
-    <button type="submit" class="ghost small">{{t $.Lang "Send another code"}}</button>
+    <button type="submit" class="link">{{t $.Lang "Send another code"}}</button>
   </form>
   {{if eq .Via "telegram"}}
   {{/* The code went to Telegram; SMS is the other road. */}}
@@ -139,7 +143,7 @@
     <input type="hidden" name="next" value="{{.Next}}">
     <input type="hidden" name="phone" value="{{.Phone}}">
     <input type="hidden" name="country" value="{{.Country}}">
-    <button type="submit" class="ghost small">{{t $.Lang "Send the code by SMS instead"}}</button>
+    <button type="submit" class="link">{{t $.Lang "Send the code by SMS instead"}}</button>
   </form>
   {{else if .TelegramCode}}
   {{/* A code over Telegram is free, instant, and never meets a do-not-disturb
@@ -151,46 +155,45 @@
     <input type="hidden" name="phone" value="{{.Phone}}">
     <input type="hidden" name="country" value="{{.Country}}">
     <input type="hidden" name="via" value="telegram">
-    <button type="submit" class="ghost small">{{t $.Lang "Send the code with Telegram instead"}}</button>
+    <button type="submit" class="link">{{t $.Lang "Send the code with Telegram instead"}}</button>
   </form>
   {{end}}
+  </div>
   {{end}}
-
-  <p class="muted hint"><a href="/login{{if .Next}}?next={{.Next}}{{end}}">{{t $.Lang "Use a different account"}}</a></p>
 
   {{/* Second step, address by code: the code that was just mailed. Reached only
        by asking for one from the password step; the one box routes an address
        to the password first. */}}
   {{else if eq .Kind "email-code"}}
-  <p class="muted hint" dir="ltr">{{.Identifier}}</p>
+  {{template "who" .}}
 
   {{if .CodeSent}}
   <form method="post" action="/login/email/verify" class="form">
     <input type="hidden" name="next" value="{{.Next}}">
     <input type="hidden" name="email" value="{{.Identifier}}">
-    <label>
-      <span>{{t $.Lang "The code sent to %s" .Identifier}}</span>
-      <input data-anidoodle="email" type="text" name="code" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="8" dir="ltr" required autofocus>
+    <label class="field">
+      <span>{{t $.Lang "The code sent to %s" (printf "\u2068%s\u2069" .Identifier)}}</span>
+      <input class="otp" data-anidoodle="email" type="text" name="code" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="8" dir="ltr" placeholder="••••••" required autofocus>
     </label>
     <button type="submit" class="primary" data-anidoodle="submit">{{t $.Lang "Sign in"}}</button>
   </form>
+  <div class="resends">
   <form method="post" action="/login/email" class="form resend">
     <input type="hidden" name="next" value="{{.Next}}">
     <input type="hidden" name="email" value="{{.Identifier}}">
-    <button type="submit" class="ghost small">{{t $.Lang "Send another code"}}</button>
+    <button type="submit" class="link">{{t $.Lang "Send another code"}}</button>
   </form>
+  </div>
   {{end}}
-
-  <p class="muted hint"><a href="/login{{if .Next}}?next={{.Next}}{{end}}">{{t $.Lang "Use a different account"}}</a></p>
 
   {{/* Second step, address or handle: the password. */}}
   {{else}}
-  <p class="muted hint" dir="ltr">{{.Identifier}}</p>
+  {{template "who" .}}
 
   <form method="post" action="/login/password" class="form">
     <input type="hidden" name="next" value="{{.Next}}">
     <input type="hidden" name="identifier" value="{{.Identifier}}">
-    <label>
+    <label class="field">
       <span>{{t $.Lang "Password"}}</span>
       <input data-anidoodle="password" type="password" name="password" autocomplete="current-password" required autofocus>
     </label>
@@ -198,21 +201,28 @@
   </form>
 
   {{if and .AllowRegistration (eq .Kind "email")}}
-  <p class="muted hint">{{t $.Lang "If no Nabu account uses this address yet, the password you type creates one."}}</p>
+  <p class="hint">{{t $.Lang "If no Nabu account uses this address yet, the password you type creates one."}}</p>
   {{end}}
 
   {{if and .Mail (eq .Kind "email")}}
   {{/* The password is not the only proof an address can give. Offered only
        where a relay is configured — a button that cannot send a code would
        report one as sent. */}}
+  <div class="divider"><span>{{t $.Lang "or"}}</span></div>
   <form method="post" action="/login/email" class="form resend">
     <input type="hidden" name="next" value="{{.Next}}">
     <input type="hidden" name="email" value="{{.Identifier}}">
-    <button type="submit" class="ghost small">{{t $.Lang "Email me a sign-in code instead"}}</button>
+    <button type="submit" class="ghost block">{{t $.Lang "Email me a sign-in code instead"}}</button>
   </form>
   {{end}}
-
-  <p class="muted hint"><a href="/login{{if .Next}}?next={{.Next}}{{end}}">{{t $.Lang "Use a different account"}}</a></p>
   {{end}}
-</main>
-{{template "foot" .}}{{end}}
+</div>
+{{template "auth-foot" .}}{{end}}
+
+{{/* The second step's reminder of who is signing in: what was typed into the
+     first box, and the way back to it. */}}
+{{define "who"}}<div class="who">
+    <span class="who-avatar" aria-hidden="true"><svg viewBox="0 0 20 20"><circle cx="10" cy="7.2" r="3.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.8 16.6c1.1-2.8 3.4-4.3 6.2-4.3s5.1 1.5 6.2 4.3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
+    <span class="who-id" dir="ltr">{{.Identifier}}</span>
+    <a class="who-change" href="/login{{if .Next}}?next={{.Next}}{{end}}" title="{{t $.Lang "Use a different account"}}">{{t $.Lang "Change"}}<span class="sr-only"> — {{t $.Lang "Use a different account"}}</span></a>
+  </div>{{end}}

@@ -390,6 +390,13 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, status int, name
 	}
 	data["Issuer"] = s.cfg.Server.Issuer
 	data["AllowRegistration"] = s.cfg.Server.AllowRegistration
+	// The ecosystem half of the sign-in screens, with the app being signed in
+	// to marked. Built from apps.yaml in memory, so it costs no query.
+	current := ""
+	if app, ok := data["App"].(*appView); ok && app != nil {
+		current = app.ID
+	}
+	data["Ecosystem"] = s.ecosystem(current)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
 	if err := s.tmpl.ExecuteTemplate(w, name, data); err != nil {

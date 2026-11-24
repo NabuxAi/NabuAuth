@@ -1,19 +1,22 @@
-{{define "consent.html"}}{{template "head" .}}
-<main class="card auth">
+{{define "consent.html"}}{{template "auth-head" .}}
+<div class="card">
   {{if .NewAccount}}
   <p class="notice" role="status">{{t $.Lang "Your Nabu account is ready. It signs you in to every app in the ecosystem — this is the only time %s asks." .Client.Name}}</p>
   {{end}}
 
-  <div class="app-head">
-    <span class="app-mark">{{initials .Client.Name}}</span>
-    <div>
-      <h1>{{t $.Lang "Connect %s" .Client.Name}}</h1>
-      <p class="sub">{{t $.Lang "Signed in as"}} <b dir="ltr">{{if .User.Email}}{{.User.Email}}{{else if .User.Phone}}{{.User.Phone}}{{else}}{{.User.Name}}{{end}}</b>. <a href="/oauth/authorize?prompt=login&amp;client_id={{.Client.ClientID}}">{{t $.Lang "Not you?"}}</a></p>
-    </div>
+  {{template "app-pair" .App}}
+  <h1>{{t $.Lang "Connect %s" .Client.Name}}</h1>
+  <p class="sub">{{t $.Lang "%s is asking to use your Nabu account." .Client.Name}}</p>
+
+  <div class="who">
+    <span class="who-avatar" aria-hidden="true">{{initials .User.Name}}</span>
+    <span class="who-id"><span class="who-label">{{t $.Lang "Signed in as"}}</span> <b dir="ltr">{{if .User.Email}}{{.User.Email}}{{else if .User.Phone}}{{.User.Phone}}{{else}}{{.User.Name}}{{end}}</b></span>
+    <a class="who-change" href="{{.SwitchURL}}">{{t $.Lang "Not you?"}}</a>
   </div>
 
+  <p class="scopes-title">{{t $.Lang "%s will get access to:" .Client.Name}}</p>
   <ul class="scopes">
-    {{range .Scopes}}<li><span class="tick">✓</span> {{t $.Lang .Label}}</li>{{end}}
+    {{range .Scopes}}<li><svg class="tick" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m3.5 8.3 2.8 2.8 6.2-6.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>{{t $.Lang .Label}}</span></li>{{end}}
   </ul>
 
   <form method="post" action="/oauth/authorize" class="form row">
@@ -30,6 +33,6 @@
     <button type="submit" name="approve" value="yes" class="primary">{{t $.Lang "Allow and continue"}}</button>
   </form>
 
-  <p class="muted hint">{{t $.Lang "Approve once and every later sign-in goes straight to %s. You can disconnect it at any time from your Nabu account." .Client.Name}} <a href="/dashboard">{{t $.Lang "Your Nabu account"}}</a></p>
-</main>
-{{template "foot" .}}{{end}}
+  <p class="hint">{{t $.Lang "Approve once and every later sign-in goes straight to %s. You can disconnect it at any time from your Nabu account." .Client.Name}} <a href="/dashboard">{{t $.Lang "Your Nabu account"}}</a></p>
+</div>
+{{template "auth-foot" .}}{{end}}

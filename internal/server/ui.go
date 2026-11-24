@@ -216,7 +216,7 @@ func (s *Server) handleLoginForm(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, next, http.StatusFound)
 		return
 	}
-	s.renderLoginView(w, r, http.StatusOK, loginView{Next: next, Via: viaFrom(r)})
+	s.renderLoginView(w, r, http.StatusOK, loginView{Next: next, Via: viaFrom(r), SignedOut: s.takeSignedOut(w, r)})
 }
 
 // viaFrom is the road the visitor asked for the code on: "telegram", or empty
@@ -464,6 +464,10 @@ type loginView struct {
 	// default. It keeps the first step asking for a mobile number, and the code
 	// step resending the way the first code went.
 	Via string
+
+	// SignedOut says the browser signed out a moment ago, so the page can say
+	// so instead of looking as if nothing happened.
+	SignedOut bool
 }
 
 // renderLogin draws the sign-in page, naming the application that sent the
@@ -520,12 +524,13 @@ func (s *Server) renderLoginView(w http.ResponseWriter, r *http.Request, status 
 		"Mail":        s.mail != nil,
 		"EmailError":  v.EmailError,
 		"EmailNotice": v.EmailNotice,
+		"SignedOut":   v.SignedOut,
 	})
 }
 
 // connectingApp is the application whose authorize request sent the visitor to
 // this form, or nil when they came here on their own.
-func (s *Server) connectingApp(r *http.Request, next string) map[string]any {
+func (s *Server) connectingApp(r *http.Request, next string) *appView {
 	if next == "" {
 		return nil
 	}
@@ -541,11 +546,15 @@ func (s *Server) connectingApp(r *http.Request, next string) map[string]any {
 	if err != nil {
 		return nil
 	}
-	return map[string]any{
-		"Name":        client.Name,
-		"Description": client.Description,
-		"URL":         client.AppURL,
+	view := s.appByID(client.ClientID, client.Name)
+	view.Name = client.Name
+	if view.Description == "" {
+		view.Description = client.Description
 	}
+	if view.URL == "" {
+		view.URL = client.AppURL
+	}
+	return &view
 }
 
 // nameFromEmail is the display name for an account created from nothing but an
@@ -612,6 +621,7 @@ func (s *Server) registrationOpen(r *http.Request) bool {
 
 func (s *Server) handleLogoutSubmit(w http.ResponseWriter, r *http.Request) {
 	s.endSession(w, r)
+	s.markSignedOut(w)
 	http.Redirect(w, r, "/login", http.StatusFound)
 }
 

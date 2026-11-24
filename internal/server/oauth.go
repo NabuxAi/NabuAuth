@@ -146,6 +146,12 @@ func (s *Server) parseAuthRequest(w http.ResponseWriter, r *http.Request, q url.
 		s.redirectError(w, r, req, "unsupported_response_type", "only response_type=code is supported")
 		return authRequest{}, false
 	}
+	// OIDC Core §3.1.2.1: none means "do not show anything", so asking for it
+	// together with a screen is a contradiction the app has to resolve.
+	if req.prompts()["none"] && len(req.prompts()) > 1 {
+		s.redirectError(w, r, req, "invalid_request", "prompt=none cannot be combined with another prompt value")
+		return authRequest{}, false
+	}
 	requested := store.SplitList(q.Get("scope"))
 	if len(requested) == 0 {
 		requested = client.Scopes
@@ -199,22 +205,64 @@ func (s *Server) parseAuthRequest(w http.ResponseWriter, r *http.Request, q url.
 	return req, true
 }
 
+// prompts is the set of values in the prompt parameter, which OIDC defines as
+// a space-delimited list.
+func (req authRequest) prompts() map[string]bool {
+	out := map[string]bool{}
+	for _, p := range strings.Fields(req.Prompt) {
+		out[p] = true
+	}
+	return out
+}
+
+// handleAuthorize is the front door every app sends a visitor through.
+//
+// prompt decides how much of it the visitor sees:
+//
+//   - none: nothing at all. A browser with a Nabu session and an app it has
+//     already approved goes straight back with a code; anything else goes back
+//     with login_required or consent_required (and the app's state), never to
+//     a page. This is what lets one gateway sign a visitor in silently because
+//     another one already did.
+//   - login: the sign-in screen, even over an existing session — "Not you?",
+//     or an app that wants proof of presence.
+//   - consent: the approval screen, even for an app approved before.
 func (s *Server) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	req, ok := s.parseAuthRequest(w, r, r.URL.Query())
 	if !ok {
 		return
 	}
+	prompts := req.prompts()
 
 	user, signedIn := s.currentUser(r)
-	if !signedIn || req.Prompt == "login" {
-		if req.Prompt == "none" {
+	if !signedIn || prompts["login"] {
+		if prompts["none"] {
 			s.redirectError(w, r, req, "login_required", "no active session")
 			return
 		}
 		if signedIn {
 			s.endSession(w, r)
 		}
-		http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusFound)
+		// The request comes back here once the visitor has signed in. It must
+		// not come back still asking for a sign-in, or the fresh session is
+		// ended again and the visitor goes round the loop forever.
+		next := r.URL.Query()
+		if prompts["login"] {
+			delete(prompts, "login")
+			kept := make([]string, 0, len(prompts))
+			for _, p := range strings.Fields(req.Prompt) {
+				if prompts[p] {
+					kept = append(kept, p)
+				}
+			}
+			if len(kept) == 0 {
+				next.Del("prompt")
+			} else {
+				next.Set("prompt", strings.Join(kept, " "))
+			}
+		}
+		target := url.URL{Path: r.URL.Path, RawQuery: next.Encode()}
+		http.Redirect(w, r, "/login?next="+url.QueryEscape(target.RequestURI()), http.StatusFound)
 		return
 	}
 
@@ -224,11 +272,11 @@ func (s *Server) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		s.redirectError(w, r, req, "server_error", "could not read consent")
 		return
 	}
-	if consented && req.Prompt != "consent" {
+	if consented && !prompts["consent"] {
 		s.issueCode(w, r, req, user)
 		return
 	}
-	if req.Prompt == "none" {
+	if prompts["none"] {
 		s.redirectError(w, r, req, "consent_required", "the user has not approved these scopes")
 		return
 	}
@@ -246,7 +294,29 @@ func (s *Server) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		"RawScope":   store.JoinList(req.Scopes),
 		"Request":    req,
 		"CancelURL":  req.RedirectURI,
+		"App":        s.consentApp(req.Client),
+		// "Not you?" asks for this same request again with prompt=login, so the
+		// other account comes back to this app — with its redirect, scopes,
+		// state and PKCE challenge — rather than to an error page.
+		"SwitchURL": switchAccountURL(r),
 	})
+}
+
+// consentApp is the approval screen's view of the requesting app.
+func (s *Server) consentApp(c store.Client) *appView {
+	view := s.appByID(c.ClientID, c.Name)
+	view.Name = c.Name
+	view.Current = true
+	return &view
+}
+
+// switchAccountURL is this authorize request again, asking for the sign-in
+// screen.
+func switchAccountURL(r *http.Request) string {
+	q := r.URL.Query()
+	q.Set("prompt", "login")
+	u := url.URL{Path: "/oauth/authorize", RawQuery: q.Encode()}
+	return u.RequestURI()
 }
 
 // handleAuthorizeDecision processes the consent form.
@@ -667,6 +737,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	s.endSession(w, r)
 	redirect := r.URL.Query().Get("post_logout_redirect_uri")
 	if redirect == "" {
+		s.markSignedOut(w)
 		http.Redirect(w, r, "/login", http.StatusFound)
 		return
 	}

@@ -25,6 +25,14 @@ registered in `apps.yaml`. That list, and nothing else, is what works today:
 - Nabu Rent
 - Instagram
 - WhatsApp
+- Telegram
+- Facebook
+- X
+- LinkedIn
+- Threads
+- YouTube
+- Snapchat
+- Social
 <!-- registered-apps:end -->
 
 The markers are not decoration: a test reads the list between them and compares
@@ -91,7 +99,7 @@ to a single static binary and ships as a distroless image.
 |---|---|
 | `GET /.well-known/openid-configuration` | Discovery document |
 | `GET /oauth/jwks.json` | Public signing keys |
-| `GET /oauth/authorize` | Login and consent screen |
+| `GET /oauth/authorize` | Login and consent screen; `prompt=none` / `login` / `consent` |
 | `GET /login` | The one box: an email, a phone number or a username |
 | `POST /login` | Decide the second step from what was typed |
 | `POST /login/password` | The second step for an address or a handle |
@@ -144,6 +152,31 @@ apps:
 Set `public: true` for a client that cannot hold a secret; it must then use PKCE
 and cannot use `client_credentials`. Set `hidden: true` to keep a service client
 out of the dashboard launcher.
+
+`brand:` is optional: one of `telegram`, `whatsapp`, `instagram`, `facebook`,
+`x`, `linkedin`, `threads`, `youtube`, `snapchat`, `social` (`config.Brands`).
+It draws that platform's mark beside the app's name on the sign-in and approval
+screens; an app without one gets its initials. Any other value is refused at
+boot, because a mark that silently draws nothing looks like a broken page.
+
+An app whose `secret_env` is not set yet still registers: the server boots,
+logs a warning naming the variable, and refuses only that app's token exchange
+(`invalid_client`) until the secret arrives. So an app can be added here before
+its secret reaches the deployment.
+
+### Silent sign-in (`prompt`)
+
+`/oauth/authorize` takes OIDC `prompt`, a space-separated list:
+
+| value | behaviour |
+|---|---|
+| `none` | No page is ever shown. A browser with a Nabu session and an app it already approved goes straight back with a `code`; otherwise back to the `redirect_uri` with `error=login_required` (no session) or `error=consent_required` (not approved yet), always with the app's `state`. Combined with any other value it is `invalid_request`. |
+| `login` | The sign-in screen even over a live session (the session is ended first). After signing in the request continues to the app; it does not ask again. |
+| `consent` | The approval screen even for an app approved before. |
+
+This is how one MCP gateway signs a visitor in without a click because another
+already did: try `prompt=none`, and fall back to an interactive redirect on
+`login_required` / `consent_required`.
 
 Environment:
 

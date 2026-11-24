@@ -249,7 +249,7 @@ func TestTokenEndpointRejectsWrongCredentials(t *testing.T) {
 	ts, st := newTestServer(t)
 	seedUser(t, st, "user@nabuxai.com", "correct-horse-battery")
 	client := signIn(t, ts, "user@nabuxai.com", "correct-horse-battery")
-	code := grantCode(t, ts, client, "testapp", "http://app.test/callback", "openid profile", "", "")
+	code := grantCode(t, ts, client, "testapp", "http://app.test/callback", "openid profile", pkceChallenge, "S256")
 
 	t.Run("wrong secret", func(t *testing.T) {
 		got := postForm(t, ts, "/oauth/token", url.Values{
@@ -395,6 +395,15 @@ func TestDiscoveryAndJWKS(t *testing.T) {
 // ---------------------------------------------------------------- helpers
 
 // grantCode runs authorize + consent and returns the authorization code.
+// pkceVerifier and pkceChallenge are the RFC 7636 appendix B pair. The test
+// apps redirect over plain http, and a code for a redirect that is not https
+// must be bound to a verifier (store.RedirectIsInterceptable), so every flow
+// against them carries one.
+const (
+	pkceVerifier  = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+	pkceChallenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+)
+
 func grantCode(t *testing.T, ts *httptest.Server, client *http.Client, clientID, redirect, scope, challenge, method string) string {
 	t.Helper()
 	q := url.Values{
@@ -554,10 +563,10 @@ func TestEmailVerifiedReflectsRealityNotAnAssumption(t *testing.T) {
 	ts, st := newTestServer(t)
 	seedUser(t, st, "user@nabuxai.com", "correct-horse-battery")
 	client := signIn(t, ts, "user@nabuxai.com", "correct-horse-battery")
-	code := grantCode(t, ts, client, "testapp", "http://app.test/callback", "openid email", "", "")
+	code := grantCode(t, ts, client, "testapp", "http://app.test/callback", "openid email", pkceChallenge, "S256")
 
 	tok := postForm(t, ts, "/oauth/token", url.Values{
-		"grant_type": {"authorization_code"}, "code": {code},
+		"grant_type": {"authorization_code"}, "code": {code}, "code_verifier": {pkceVerifier},
 		"client_id": {"testapp"}, "client_secret": {"test-confidential-secret"},
 	})
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/user", nil)
