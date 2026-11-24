@@ -226,7 +226,8 @@ func (req authRequest) prompts() map[string]bool {
 //     another one already did.
 //   - login: the sign-in screen, even over an existing session — "Not you?",
 //     or an app that wants proof of presence.
-//   - consent: the approval screen, even for an app approved before.
+//   - consent: the approval screen, even for an app approved before or one
+//     marked first_party.
 func (s *Server) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	req, ok := s.parseAuthRequest(w, r, r.URL.Query())
 	if !ok {
@@ -272,6 +273,20 @@ func (s *Server) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		s.redirectError(w, r, req, "server_error", "could not read consent")
 		return
 	}
+	// A first-party app (first_party in apps.yaml) is approved by signing in to
+	// Nabu at all: the grant is recorded as if the screen had been answered, so
+	// it shows on the dashboard and can be disconnected there, and a silent
+	// prompt=none request succeeds on the first visit. prompt=consent still
+	// shows the screen. Everything parseAuthRequest checked — the exact
+	// redirect match, PKCE — has already been enforced by now.
+	if !consented && !prompts["consent"] && s.firstParty(req.Client.ClientID) {
+		if err := s.store.SaveConsent(r.Context(), user.ID, req.Client.ClientID, req.Scopes); err != nil {
+			s.log.Error("save first-party consent", "error", err)
+			s.redirectError(w, r, req, "server_error", "could not record consent")
+			return
+		}
+		consented = true
+	}
 	if consented && !prompts["consent"] {
 		s.issueCode(w, r, req, user)
 		return
@@ -300,6 +315,12 @@ func (s *Server) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		// state and PKCE challenge — rather than to an error page.
 		"SwitchURL": switchAccountURL(r),
 	})
+}
+
+// firstParty reports whether apps.yaml marks a client first_party.
+func (s *Server) firstParty(clientID string) bool {
+	a, ok := s.cfg.App(clientID)
+	return ok && a.FirstParty
 }
 
 // consentApp is the approval screen's view of the requesting app.

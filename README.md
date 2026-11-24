@@ -176,7 +176,10 @@ its secret reaches the deployment.
 
 This is how one MCP gateway signs a visitor in without a click because another
 already did: try `prompt=none`, and fall back to an interactive redirect on
-`login_required` / `consent_required`.
+`login_required` / `consent_required`. The gateways are marked
+`first_party: true`, which skips the approval screen (the grant is recorded as
+approved), so for them `prompt=none` succeeds on the first visit too — see
+`docs/onboarding-an-app.md`.
 
 Environment:
 

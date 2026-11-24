@@ -157,6 +157,12 @@ that look like codes; light and dark; Vazirmatn embedded for Persian and Arabic
 with his pause control faint until hovered or focused. Every URL, form field and
 flow is unchanged. Apps can carry an optional, validated `brand:`.
 
+**The gateways are `first_party: true`** (new optional bool, default false):
+`/oauth/authorize` skips the approval screen for them and records the grant as
+approved, so `prompt=none` from a gateway succeeds on the first visit — "sign
+in once, every MCP opens". Redirect matching and PKCE are unchanged and run
+first; every other app still needs its one approval.
+
 Also fixed on the way: three integration tests had been failing on `main` since
 the rule that a non-https redirect needs PKCE — they now send a verifier.
 

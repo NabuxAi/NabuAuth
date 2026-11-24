@@ -1,12 +1,15 @@
 package server
 
 import (
+	"context"
 	"html"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"testing"
+
+	"nabuauth/internal/config"
 )
 
 // The MCP gateways sign a visitor in silently when another one already has:
@@ -209,5 +212,112 @@ func TestNotYouKeepsTheWholeRequest(t *testing.T) {
 	if u.Path != "/oauth/authorize" || q.Get("prompt") != "login" ||
 		q.Get("redirect_uri") != "http://app.test/callback" || q.Get("state") != "st-42" || q.Get("code_challenge") != pkceChallenge {
 		t.Fatalf("Not you? points at %s; it must repeat the request with prompt=login", href)
+	}
+}
+
+// A first-party app (first_party: true in apps.yaml — the MCP gateways) is
+// approved by signing in to Nabu at all. That is what lets "sign in once and
+// every MCP opens" work: the first silent request to a gateway the person has
+// never visited already gets a code.
+func withFirstPartyApp(c *config.Config) {
+	c.Apps = append(c.Apps, config.App{
+		ID:           "fp-mcp",
+		Name:         "First Party Gateway",
+		Brand:        "telegram",
+		FirstParty:   true,
+		URL:          "http://fp.test",
+		RedirectURIs: []string{"http://fp.test/callback"},
+		Scopes:       []string{"openid", "profile", "email"},
+		SecretEnv:    "TEST_SECRET_CONFIDENTIAL",
+	})
+}
+
+func firstPartyQuery(extra url.Values) url.Values {
+	q := authorizeQuery(extra)
+	q.Set("client_id", "fp-mcp")
+	q.Set("redirect_uri", "http://fp.test/callback")
+	return q
+}
+
+func TestAFirstPartyAppSignsInSilentlyOnTheFirstVisit(t *testing.T) {
+	ts, st := newTestServer(t, withFirstPartyApp)
+	user := seedUser(t, st, "user@nabuxai.com", "correct-horse-battery")
+	client := signIn(t, ts, "user@nabuxai.com", "correct-horse-battery")
+
+	// No grant has ever been given to this app, and the request shows nothing.
+	loc := authorizeLocation(t, client, ts.URL, firstPartyQuery(url.Values{"prompt": {"none"}}))
+	if loc.Host != "fp.test" || loc.Query().Get("code") == "" || loc.Query().Get("error") != "" {
+		t.Fatalf("a first-party prompt=none with no prior grant got %s, want a code", loc)
+	}
+	if loc.Query().Get("state") != "st-42" {
+		t.Errorf("state = %q, want st-42", loc.Query().Get("state"))
+	}
+	tok := postForm(t, ts, "/oauth/token", url.Values{
+		"grant_type": {"authorization_code"}, "code": {loc.Query().Get("code")},
+		"code_verifier": {pkceVerifier}, "redirect_uri": {"http://fp.test/callback"},
+		"client_id": {"fp-mcp"}, "client_secret": {"test-confidential-secret"},
+	})
+	if tok["access_token"] == nil {
+		t.Fatalf("the first-party code could not be exchanged: %v", tok)
+	}
+
+	// The grant is recorded, so the dashboard lists it and can disconnect it.
+	consented, err := st.HasConsent(context.Background(), user.ID, "fp-mcp", []string{"openid", "profile"})
+	if err != nil || !consented {
+		t.Fatalf("the first-party grant was not recorded: %v %v", consented, err)
+	}
+
+	// The same browser, at an ordinary app it never approved, still gets
+	// consent_required: first_party belongs to the app, not to the session.
+	other := authorizeLocation(t, client, ts.URL, authorizeQuery(url.Values{"prompt": {"none"}}))
+	if other.Host != "app.test" || other.Query().Get("error") != "consent_required" {
+		t.Fatalf("a non-first-party app got %s, want consent_required", other)
+	}
+}
+
+func TestAFirstPartyAppSkipsTheScreenButNotTheRules(t *testing.T) {
+	ts, st := newTestServer(t, withFirstPartyApp)
+	seedUser(t, st, "user@nabuxai.com", "correct-horse-battery")
+	client := signIn(t, ts, "user@nabuxai.com", "correct-horse-battery")
+
+	// Interactive sign-in goes straight through, no approval screen.
+	loc := authorizeLocation(t, client, ts.URL, firstPartyQuery(nil))
+	if loc.Host != "fp.test" || loc.Query().Get("code") == "" {
+		t.Fatalf("a first-party sign-in got %s, want a code with no approval screen", loc)
+	}
+
+	// prompt=consent still asks.
+	resp, err := client.Get(ts.URL + "/oauth/authorize?" + firstPartyQuery(url.Values{"prompt": {"consent"}}).Encode())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page := readBody(t, resp); resp.StatusCode != http.StatusOK || !strings.Contains(page, "Connect First Party Gateway") {
+		t.Fatalf("prompt=consent on a first-party app did not show the screen: %d", resp.StatusCode)
+	}
+
+	// No session: still login_required, never a code.
+	anon := authorizeLocation(t, noFollowClient(), ts.URL, firstPartyQuery(url.Values{"prompt": {"none"}}))
+	if anon.Query().Get("error") != "login_required" {
+		t.Fatalf("first-party prompt=none with no session got %s, want login_required", anon)
+	}
+
+	// The redirect must still match exactly...
+	bad := firstPartyQuery(nil)
+	bad.Set("redirect_uri", "http://evil.test/callback")
+	resp, err = client.Get(ts.URL + "/oauth/authorize?" + bad.Encode())
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest || resp.Header.Get("Location") != "" {
+		t.Fatalf("an unregistered redirect for a first-party app got %d to %q", resp.StatusCode, resp.Header.Get("Location"))
+	}
+
+	// ...and PKCE is still required where it was.
+	noPKCE := firstPartyQuery(nil)
+	noPKCE.Del("code_challenge")
+	noPKCE.Del("code_challenge_method")
+	if got := authorizeLocation(t, client, ts.URL, noPKCE); got.Query().Get("error") != "invalid_request" || got.Query().Get("code") != "" {
+		t.Fatalf("a first-party request without PKCE on a non-https redirect got %s, want invalid_request", got)
 	}
 }

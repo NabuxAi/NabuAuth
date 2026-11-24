@@ -74,6 +74,10 @@ apps.local.yaml          # همان برای توسعهٔ محلی
   مستقیم کد، وگرنه `login_required`/`consent_required` با `state` به callbackِ اپ.
   `prompt=login` سشن را می‌بندد و `next`ِ صفحهٔ ورود را **بدونِ** `login` می‌سازد —
   با آن، ورودِ تازه دوباره بسته می‌شد و حلقهٔ بی‌پایان بود (`prompt_test.go`).
+- **`first_party: true` صفحهٔ تأیید را رد می‌کند** و رضایت را ثبت‌شده می‌نویسد، تا
+  `prompt=none` از اولین بازدید کد بدهد. فقط درگاه‌های MCP (`*-mcp`) آن را دارند و
+  تستی همین را نگه می‌دارد؛ تطبیقِ redirect و PKCE پیش از آن اجرا می‌شوند. برای اپی
+  با `wallet.write` روشنش نکن.
 - **`brand` در `apps.yaml` اختیاری است** و فقط از `config.Brands`؛ علامتِ پلتفرم را
   کنارِ نامِ اپ در صفحهٔ ورود می‌کشد (`web/templates/brand.html`).
 

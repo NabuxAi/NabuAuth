@@ -96,3 +96,29 @@ func TestTheMCPGatewaysAreRegistered(t *testing.T) {
 		}
 	}
 }
+
+// first_party skips the approval screen, so it is a deliberate, per-app
+// choice: a boolean, off unless written, and in apps.yaml only on the MCP
+// gateways.
+func TestFirstPartyIsABooleanAndOnlyOnTheGateways(t *testing.T) {
+	if _, err := Load(write(t, `
+apps:
+  - id: demo
+    name: Demo
+    first_party: please
+    redirect_uris: [https://demo.example.com/callback]
+`)); err == nil {
+		t.Fatal("a first_party that is not a boolean loaded")
+	}
+
+	cfg, err := Load(filepath.Join("..", "..", "apps.yaml"))
+	if err != nil {
+		t.Fatalf("loading apps.yaml: %v", err)
+	}
+	for _, a := range cfg.Apps {
+		gateway := strings.HasSuffix(a.ID, "-mcp")
+		if a.FirstParty != gateway {
+			t.Errorf("%s first_party = %v; only the MCP gateways are first-party", a.ID, a.FirstParty)
+		}
+	}
+}

@@ -306,6 +306,14 @@ type App struct {
 	// against the list at load, because an unknown value would quietly draw
 	// nothing and look like a broken page rather than a typo.
 	Brand string `yaml:"brand"`
+
+	// FirstParty marks an app the Nabu organisation runs itself and whose
+	// access the person already chose by signing in to Nabu: the approval
+	// screen is skipped and the grant recorded as if approved, so a silent
+	// prompt=none sign-in succeeds on the very first visit. The redirect URI
+	// match and PKCE rules are unchanged. Default false; YAML refuses anything
+	// that is not a boolean.
+	FirstParty bool `yaml:"first_party"`
 }
 
 // Brands are the platform marks the sign-in pages know how to draw
