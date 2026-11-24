@@ -31,9 +31,9 @@ The apps registered today, and where each one really listens:
 | Telegram | `https://tm.nabuxai.com/auth/nabu/callback` |
 | Facebook | `https://fb.nabuxai.com/auth/nabu/callback` |
 | X | `https://x.nabuxai.com/auth/nabu/callback` |
-| LinkedIn | `https://linkedin.nabuxai.com/auth/nabu/callback` |
-| Threads | `https://threads.nabuxai.com/auth/nabu/callback` |
-| YouTube | `https://youtube.nabuxai.com/auth/nabu/callback` |
+| LinkedIn | `https://li.nabuxai.com/auth/nabu/callback` |
+| Threads | `https://th.nabuxai.com/auth/nabu/callback` |
+| YouTube | `https://yt.nabuxai.com/auth/nabu/callback` |
 | Snapchat | `https://snap.nabuxai.com/auth/nabu/callback` |
 | Social | `https://social.nabuxai.com/auth/nabu/callback` |
 
