@@ -189,7 +189,28 @@ apps:
       - https://nabupilot.ir/virtual-office/
       - https://nabupilot.ir/webapp/
       - https://nabupilot.ir/oauth/callback
+      # The NabuPilot Android app (com.nabuxai.pilot, a WebView around the office)
+      # runs this client's sign-in in a Custom Tab, because Google refuses OAuth in
+      # an embedded WebView, and comes back through its own scheme. The app makes
+      # its own PKCE pair and hands the tokens to the office it wraps.
+      - nabupilotapp://auth
     scopes: [openid, profile, email, wallet, offline]
+
+  # The NabuPilot assistant phone app (Expo, ai.nabux.pilot, NabuPilot repo
+  # mobile/). A public client: PKCE (S256, enforced for public clients), no
+  # secret. The redirect is the app's custom scheme. Hidden from the launcher:
+  # the product tile is nabupilot-office.
+  - id: nabupilot-mobile
+    name: NabuPilot
+    description: 3D virtual office where AI employees run the business
+    icon: device-phone-mobile
+    url: https://pilot.nabuxai.com
+    badge: Active
+    public: true
+    hidden: true
+    redirect_uris:
+      - nabupilot://auth
+    scopes: [openid, profile, email, offline]
 
   - id: nabuchat
     name: NabuChat
