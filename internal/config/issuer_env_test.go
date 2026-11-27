@@ -49,7 +49,7 @@ func TestShippedAppsAreConsistent(t *testing.T) {
 			// nabucrm is one client for two deployments. The launcher URL stays
 			// on .com; the Iran NabuCRM and NabuPay hosts are the other place
 			// this same client is allowed to return.
-			if app.ID == "nabucrm" && iranNabuCRMRedirects[uri] {
+			if app.ID == "nabucrm" && (iranNabuCRMRedirects[uri] || uri == nabuOSRedirect) {
 				continue
 			}
 			// An Iran mirror of the app is the same product on the same path
@@ -77,6 +77,10 @@ var iranNabuCRMRedirects = map[string]bool{
 	"https://crm.nabuxai.ir/auth/nabu/callback": true,
 	"https://pay.nabuxai.ir/auth/nabu/callback": true,
 }
+
+// nabuOSRedirect is NabuCRM served under the NabuOS name. Listed so that host
+// is a registered origin and its logout may return there.
+const nabuOSRedirect = "https://os.nabuxai.com/auth/nabu/callback"
 
 // iranBrandRedirects are the callbacks of Iran instances that live on their
 // own brand domain rather than a nabuxai.ir mirror. Listed on purpose, like
@@ -111,6 +115,7 @@ func TestNabuCRMKeepsTheComCallbackAndAllowsIran(t *testing.T) {
 		"https://crm.nabuxai.com/auth/nabu/callback",
 		"https://crm.nabuxai.ir/auth/nabu/callback",
 		"https://pay.nabuxai.ir/auth/nabu/callback",
+		nabuOSRedirect,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("nabucrm redirect_uris = %q, want %q", got, want)

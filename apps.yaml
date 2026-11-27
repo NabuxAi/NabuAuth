@@ -270,6 +270,10 @@ apps:
       # sign-in. pay.nabuxai.ir is the same codebase. The .com callback stays.
       - https://crm.nabuxai.ir/auth/nabu/callback
       - https://pay.nabuxai.ir/auth/nabu/callback
+      # os.nabuxai.com is the same codebase under the NabuOS name. Listing it
+      # makes it a registered origin, so its logout can return there through
+      # post_logout_redirect_uri instead of hitting "Redirect not allowed".
+      - https://os.nabuxai.com/auth/nabu/callback
     scopes: [openid, profile, email, offline]
     secret_env: NABUAUTH_SECRET_NABUCRM
 
