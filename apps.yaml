@@ -222,6 +222,9 @@ apps:
       # NextAuth builds this from the provider id, so the path is fixed by the
       # framework rather than chosen.
       - https://chat.nabuxai.com/api/auth/callback/nabuauth
+      # The Iran mirror. NabuChat builds its callback from the host the
+      # browser opened, so sign-in there returns to nabuchat.ir.
+      - https://nabuchat.ir/api/auth/callback/nabuauth
     scopes: [openid, profile, email, offline]
     secret_env: NABUAUTH_SECRET_NABUCHAT
 
